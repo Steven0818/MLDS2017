@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-def GRU(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,name,sequence_length=None):
+def BiGRU(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,name,sequence_length=None):
 
 	inputs_shape = inputs.get_shape().as_list()
 	#inputs_shape(batch, max_steps, input_feature_dim)
