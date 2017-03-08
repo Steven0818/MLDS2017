@@ -1,29 +1,30 @@
 import tensorflow as tf
 
 
-def BiGRU(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,name,sequence_length=None):
+def BiGRU(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,name,sequence_length=None,reuse=False):
 
 	inputs_shape = inputs.get_shape().as_list()
 	#inputs_shape(batch, max_steps, input_feature_dim)
 
 	if sequence_length == None:
 		sequence_length = [inputs_shape[1]]*inputs_shape[0]
-		
-	fGRUcell = tf.nn.rnn_cell.GRUCell(num_hidden_neurons)  # Or LSTMCell(num_neurons)
-	fGRUcell_withDropout = tf.nn.rnn_cell.DropoutWrapper(fGRUcell, output_keep_prob=dropout)
-	Multi_fGRUcell_withDropout = tf.nn.rnn_cell.MultiRNNCell([fGRUcell_withDropout] * num_layers)
-
-	bGRUcell = tf.nn.rnn_cell.GRUCell(num_hidden_neurons)  # Or LSTMCell(num_neurons)
-	bGRUcell_withDropout = tf.nn.rnn_cell.DropoutWrapper(bGRUcell, output_keep_prob=dropout)
-	Multi_bGRUcell_withDropout = tf.nn.rnn_cell.MultiRNNCell([bGRUcell_withDropout] * num_layers)
 
 
 	with tf.variable_scope('GRU_'+name):
+		if reuse:
+			tf.get_variable_scope().reuse_variables()
 		###OUTPUT###
 		weights = tf.get_variable("weights", [2*num_hidden_neurons,output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
 		bias = tf.get_variable("bias", [output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
 
 		###GRU###
+		fGRUcell = tf.nn.rnn_cell.GRUCell(num_hidden_neurons)  # Or LSTMCell(num_neurons)
+		fGRUcell_withDropout = tf.nn.rnn_cell.DropoutWrapper(fGRUcell, output_keep_prob=dropout)
+		Multi_fGRUcell_withDropout = tf.nn.rnn_cell.MultiRNNCell([fGRUcell_withDropout] * num_layers)
+
+		bGRUcell = tf.nn.rnn_cell.GRUCell(num_hidden_neurons)  # Or LSTMCell(num_neurons)
+		bGRUcell_withDropout = tf.nn.rnn_cell.DropoutWrapper(bGRUcell, output_keep_prob=dropout)
+		Multi_bGRUcell_withDropout = tf.nn.rnn_cell.MultiRNNCell([bGRUcell_withDropout] * num_layers)
 		_output_h, _state_c = tf.nn.bidirectional_dynamic_rnn(
 		                                				cell_fw=Multi_fGRUcell_withDropout,
 		                                				cell_bw=Multi_bGRUcell_withDropout,

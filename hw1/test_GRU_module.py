@@ -10,14 +10,25 @@ x = tf.placeholder(shape=(input_shape[0],input_shape[1],input_shape[2]),dtype=tf
 gru_output = GRU.BiGRU(	inputs=x,
 						num_layers=1,
 						num_hidden_neurons=128,
-						output_size=200,
+						output_size=300,
 						dropout=0.5,
 						activation='relu',
 						name='test',
-						sequence_length=None
+						sequence_length=None,
+						reuse=False
 					) #(batch,max_steps,output_size)
-gru_output_shape_use = gru_output[0].get_shape()
-gru_output_shape_print1 = tf.shape(gru_output)
+gru_output2 = GRU.BiGRU(	inputs=gru_output,
+						num_layers=2,
+						num_hidden_neurons=128,
+						output_size=300,
+						dropout=0.5,
+						activation='relu',
+						name='test',
+						sequence_length=None,
+						reuse=True
+					)
+gru_output_shape_use = gru_output2[0].get_shape()
+gru_output_shape_print1 = tf.shape(gru_output2)
 
 
 

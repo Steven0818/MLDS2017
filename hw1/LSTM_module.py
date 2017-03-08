@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 
-def BiLSTM(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,name,sequence_length=None,peephole=False):
+def BiLSTM(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,name,sequence_length=None,reuse=False,peephole=False):
 
 	inputs_shape = inputs.get_shape().as_list()
 	#inputs_shape(batch, max_steps, input_feature_dim)
@@ -18,6 +18,8 @@ def BiLSTM(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,n
 	Multi_bLSTMcell_withDropout = tf.nn.rnn_cell.MultiRNNCell([bLSTMcell_withDropout] * num_layers)
 
 	with tf.variable_scope('LSTM_'+name):
+		if reuse:
+			tf.get_variable_scope().reuse_variables()
 		###OUTPUT###
 		weights = tf.get_variable("weights", [2*num_hidden_neurons,output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
 		bias = tf.get_variable("bias", [output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
