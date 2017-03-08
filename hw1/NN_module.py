@@ -18,7 +18,13 @@ def BiGRU(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,na
 	Multi_bGRUcell_withDropout = tf.nn.rnn_cell.MultiRNNCell([bGRUcell_withDropout] * num_layers)
 
 
-	_output_h, _state_c = tf.nn.bidirectional_dynamic_rnn(
+	with tf.variable_scope('GRU_'+name):
+		###OUTPUT###
+		weights = tf.get_variable("weights", [2*num_hidden_neurons,output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
+		bias = tf.get_variable("bias", [output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
+
+		###GRU###
+		_output_h, _state_c = tf.nn.bidirectional_dynamic_rnn(
 		                                				cell_fw=Multi_fGRUcell_withDropout,
 		                                				cell_bw=Multi_bGRUcell_withDropout,
 		                                				dtype=tf.float32,
@@ -29,13 +35,7 @@ def BiGRU(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,na
 
 	output_h = tf.concat(2, _output_h) ##(batch,max_steps,2*num_hiden_neurons)
 	output_h = tf.reshape(output_h, [-1, 2*num_hidden_neurons]) ##(batch*max_steps,2*num_hiden_neurons)
-
-
-
-
-	with tf.variable_scope('GRU_'+name):
-		weights = tf.get_variable("weights", [2*num_hidden_neurons,output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
-		bias = tf.get_variable("bias", [output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
+		
 		
 
 	if activation == 'tanh':
@@ -67,8 +67,13 @@ def BiLSTM(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,n
 	bLSTMcell_withDropout = tf.nn.rnn_cell.DropoutWrapper(bLSTMcell, output_keep_prob=dropout)
 	Multi_bLSTMcell_withDropout = tf.nn.rnn_cell.MultiRNNCell([bLSTMcell_withDropout] * num_layers)
 
+	with tf.variable_scope('LSTM_'+name):
+		###OUTPUT###
+		weights = tf.get_variable("weights", [2*num_hidden_neurons,output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
+		bias = tf.get_variable("bias", [output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
 
-	_output_h, _state_c = tf.nn.bidirectional_dynamic_rnn(
+		###LSTM###
+		_output_h, _state_c = tf.nn.bidirectional_dynamic_rnn(
 		                                				cell_fw=Multi_fLSTMcell_withDropout,
 		                                				cell_bw=Multi_bLSTMcell_withDropout,
 		                                				dtype=tf.float32,
@@ -79,10 +84,7 @@ def BiLSTM(inputs,num_layers,num_hidden_neurons,output_size,dropout,activation,n
 
 	output_h = tf.concat(2, _output_h)
 	output_h = tf.reshape(output_h, [-1, 2*num_hidden_neurons])
-
-	with tf.variable_scope('LSTM_'+name):
-		weights = tf.get_variable("weights", [2*num_hidden_neurons,output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
-		bias = tf.get_variable("bias", [output_size],initializer=tf.truncated_normal_initializer(stddev=0.1,dtype=tf.float32))
+		
 		
 
 	if activation == 'tanh':
