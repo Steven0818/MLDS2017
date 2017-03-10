@@ -88,9 +88,12 @@ class IndexedWord2Vec():
 
     def __getitem__(self, indexes):
         if isinstance(indexes, int):
-            return self.index[indexes][np.newaxis, :]
+            if indexes in self.index:
+                return self.index[indexes][np.newaxis, :]
+            return None
 
-        return np.vstack([self.index[i] for i in indexes])
+        ret = [self.index[i] for i in indexes if i in self.index]
+        return np.vstack(ret) if len(ret) > 0 else None
 
     def __contains__(self, i):
         return i in self.index
