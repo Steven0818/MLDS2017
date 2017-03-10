@@ -27,7 +27,7 @@ def build_dict(data_path="./Holmes_Training_Data", dict_path="./dict.json"):
     word_count = Counter()
     for filename in os.listdir(data_path):
         read_count = 0
-        with open(data_path+filename, encoding="utf-8", errors='ignore') as f:
+        with open(os.path.join(data_path,filename), encoding="utf-8", errors='ignore') as f:
             words = []
             for line in f:
                 # trim LICENSE
@@ -64,7 +64,7 @@ def load_dictionary(size, dict_path="./dict.json"):
     #     for i in range(0, len(l), n):
     #         yield l[i:i + n]
 
-def one_of_n_encode(N=30000):
+def one_of_n_encode(N=30000, data_path="./Holmes_Training_Data"):
     dictionary = load_dictionary(N)
     def to_index(token):
         if token in dictionary:
@@ -75,8 +75,8 @@ def one_of_n_encode(N=30000):
         return [to_index(stemmer.stem(x)) for x in word_tokenizer.tokenize(sen)]
 
     sentences = []
-    for filename in os.listdir("./Holmes_Training_Data"):
-        with open("./Holmes_Training_Data/"+filename, encoding="utf-8", errors='ignore') as f:
+    for filename in os.listdir(data_path):
+        with open(os.path.join(data_path, filename), encoding="utf-8", errors='ignore') as f:
             # trim LICENSE
             for line in f:
                 if line.find("*END*THE SMALL PRINT!") != -1:
