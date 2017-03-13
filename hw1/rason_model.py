@@ -1,25 +1,27 @@
 import tensorflow as tf
 
-class biLSTM_model(object):
+class biGRU_model(object):
 
-    def __init__(self, input, batch_size, vocab_size, num_steps, num_hidden=800, dropout_rate=0.5, num_layers=2,):
+    def __init__(self, batch_size=20, num_steps=40, vocab_size=30000, num_hidden=800, dropout_rate=0.5, num_layers=2,):
         
         ### input.shape = (batch_size, num_steps+1, vocab_size)
         self.sentences = tf.placeholder(shape=(None, num_steps + 1, vocab_size), dtype=tf.float32)
         
-        fw_input = self.sentence[:,:num_steps, :]
-        bw_input = tf.reverse(self.sentence[:,1:,:], 1)
-        final_output = self.sentence[:,1:-1,:]
+        fw_input = self.sentences[:,:num_steps, :]
+        bw_input = tf.reverse(self.sentences[:,1:,:], [1])
+        final_output = self.sentences[:,1:-1,:]
         
-        with tf.variable_scope('biGRU'):
-            
-            fwGRU_cell = tf.contrib.rnn.GRUCell(num_hidden)
-            fwGRU_withDropout = tf.contrib.rnn.DropoutWrapper(fwGRU_cell, output_keep_prob=dropout_rate)
-            fw_multiGRU_cell = tf.contrib.rnn.MultiRNNCell([fwGRU_withDropout] * num_layers)
-                       
-            bwGRU_cell = tf.contrib.rnn.GRUCell(num_hidden)
-            bwGRU_withDropout = tf.contrib.rnn.DropoutWrapper(bwGRU_cell, output_keep_prob=dropout_rate)
-            bw_multiGRU_cell = tf.contrib.rnn.MultiRNNCell([bwGRU_withDropout] * num_layers)
+        with tf.variable_scope('fwGRU'):
+            with tf.device('/cpu:0'):
+                fwGRU_cell = tf.contrib.rnn.GRUCell(num_hidden)
+                fwGRU_withDropout = tf.contrib.rnn.DropoutWrapper(fwGRU_cell, output_keep_prob=dropout_rate)
+                fw_multiGRU_cell = tf.contrib.rnn.MultiRNNCell([fwGRU_withDropout] * num_layers)
+        
+        with tf.variable_scope('bwGRU'):
+            with tf.device('/cpu:0'):
+                bwGRU_cell = tf.contrib.rnn.GRUCell(num_hidden)
+                bwGRU_withDropout = tf.contrib.rnn.DropoutWrapper(bwGRU_cell, output_keep_prob=dropout_rate)
+                bw_multiGRU_cell = tf.contrib.rnn.MultiRNNCell([bwGRU_withDropout] * num_layers)
         
         self._fw_initial_state = fw_multiGRU_cell.zero_state(batch_size, tf.float32)
         self._bw_initial_state = bw_multiGRU_cell.zero_state(batch_size, tf.float32)
@@ -30,7 +32,7 @@ class biLSTM_model(object):
         fw_state = self._fw_initial_state
         bw_state = self._bw_initial_state
 
-        with tf.variable_scope('biGRU'):
+        with tf.variable_scope('fwGRU'):
             for time_step in range(num_steps):
                 if time_step > 0: 
                     tf.get_variable_scope().reuse_variables()
@@ -38,32 +40,40 @@ class biLSTM_model(object):
                 fw_cell_output, fw_state = fw_multiGRU_cell(fw_input[:, time_step, :], fw_state)
                 fw_outputs.append(fw_cell_output)
                 
+        with tf.variable_scope('bwGRU'):
+            for time_step in range(num_steps):
+                if time_step > 0: 
+                    tf.get_variable_scope().reuse_variables()        
+                
                 bw_cell_output, bw_state = bw_multiGRU_cell(bw_input[:, time_step, :], bw_state)
                 bw_outputs.append(bw_cell_output)
         
         
-        ### fw_output.shape = (batch_size, num_steps, vocab_size) and means the 2nd~(num_steps+1)th word
-        ### bw_output.shape = (batch_size, num_steps, vocab_size) and means the (num_steps)th~1st word
+        ### fw_output.shape = (batch_size, num_steps, num_hidden) and means the 2nd~(num_steps+1)th word
+        ### bw_output.shape = (batch_size, num_steps, num_hidden) and means the (num_steps)th~1st word
         ### consider only 2nd~(num_steps)th word in fw_output
         ### consider only (num_steps)th~2nd word in bw_output
-        fw_output = tf.concat(fw_outputs, 1)[:,:-1,:]
-        bw_output = tf.concat(bw_outputs, 1)[:,:-1,:]
-        reverse_bw_output = tf.reverse(bw_output, 1)
+        fw_output = tf.reshape(tf.concat(fw_outputs, 1), [batch_size, num_steps, num_hidden])
+        bw_output = tf.reshape(tf.concat(bw_outputs, 1), [batch_size, num_steps, num_hidden])
+        fw_output = fw_output[:,:-1,:]
+        bw_output = bw_output[:,:-1,:]
+        reverse_bw_output = tf.reverse(bw_output, [1])
         
         ### [batch_size * (num_steps-1), 2*num_hidden]
         gru_output_feature = tf.reshape(tf.concat([fw_output, reverse_bw_output], 2), [-1, 2*num_hidden])
         
         with tf.variable_scope('biGRU'):
-     	
+            
+            with tf.device('/cpu:0'):
             ## DNN parameter
-            w_1 = tf.get_variable("w_dnn_1", [2*num_hidden, 6*num_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
-            b_1 = tf.get_variable("b_dnn_1", [6*num_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
+                w_1 = tf.get_variable("w_dnn_1", [2*num_hidden, 6*num_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
+                b_1 = tf.get_variable("b_dnn_1", [6*num_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
 
-            w_2 = tf.get_variable("w_dnn_2", [6*num_hidden, vocab_size], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
-            b_2 = tf.get_variable("b_dnn_2", [vocab_size], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
+                w_2 = tf.get_variable("w_dnn_2", [6*num_hidden, vocab_size], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
+                b_2 = tf.get_variable("b_dnn_2", [vocab_size], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
 
      	### [batch_size * (num_steps-1), 6*width]
-        dnn_output_1 = tf.relu(tf.matmul(gru_output_feature, w_1) + b_1)
+        dnn_output_1 = tf.nn.relu(tf.matmul(gru_output_feature, w_1) + b_1)
 
      	### [batch_size * (num_steps-1), vocab_size]
         prediction = tf.matmul(dnn_output_1, w_2) + b_2
