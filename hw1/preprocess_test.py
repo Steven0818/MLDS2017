@@ -12,7 +12,12 @@ except ImportError:
         for obj in iterable:
             yield obj
 
-def preprocess_test(dic, questions):
+def preprocess_test(dic, qpath):
+    dic['_____'] = -1
+
+    questions = pandas.read_csv(qpath)
+    questions.columns = ['id', 'question', 'a', 'b', 'c', 'd', 'e']
+
     def get_idx(word):
         if word in dic:
             return dic[word]
@@ -43,9 +48,5 @@ if __name__ == '__main__':
         exit()
 
     dic = json.load(open(sys.argv[1]))
-    dic['_____'] = -1
 
-    questions = pandas.read_csv(sys.argv[2])
-    questions.columns = ['id', 'question', 'a', 'b', 'c', 'd', 'e']
-
-    json.dump(preprocess_test(dic, questions), open(sys.argv[3], 'w'))
+    json.dump(preprocess_test(dic, sys.argv[2]), open(sys.argv[3], 'w'))
