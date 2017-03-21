@@ -39,7 +39,7 @@ def preprocess_test(dic, qpath):
 
 def print_usage():
     print('Usage:')
-    print('\tpython3 preprocessing_test.py <input-dict> <input-csv> <output-json>')
+    print('\tpython3 preprocess_test.py <input-dict> <input-csv> <output-json>')
 
 
 if __name__ == '__main__':
