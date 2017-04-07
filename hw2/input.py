@@ -1,0 +1,65 @@
+import numpy as np
+import multiprocessing as mp
+import random
+
+class DataLoader():
+    def __init__(self, input_json, data_path='data/training_data/feat' ,frame_step=80, frame_dim=4096, caption_step=30):
+        self.vocab_size = vocab_size
+        self.data_path = data_path
+        self.frame_step = frame_step
+        self.frame_dim = frame_dim
+        self.caption_step = caption_step
+        
+        self.video_names = []
+        self.cap_sentences = []
+        for video in input_json:
+            for sentence in datum['caption']:
+                self.video_names.append(datum['id'])
+                self.cap_sentences.append(sentence)
+                
+                
+    def shuffle(self):
+        z = zip(self.video_names, self.cap_sentences)
+        random.shuffle(z)
+        self.video_names, self.cap_sentences = map(list, zip(*z))
+        
+    def batch_gen(self, batch_size):
+        QUEUE_END = '__QUEUE_END105834569xx'
+        
+        def raw2vec(caption_step, q):
+            
+            for i, filename in enumerate(self.video_names):
+                filepath = os.path.join(self.data_path, filename + '.npy')
+                x = np.load(filepath)                
+                y = np.array(cap_sentences[i]).astype(np.int32)
+                q.put((x,y))
+            
+            q.put(QUEUE_END)
+            q.close()
+            
+        q = mp.Queue(maxsize=200)
+        
+        p = mp.Process(target=raw2vec, args=(self.caption_step, q))
+        p.daemon = True
+        p.start()
+        
+        x_batch = np.zeros((batch_size, self.frame_step, self.frame_dim), dtype=np.float32)
+        y_batch = np.zeros((batch_size, self.caption_step+1), dtype=np.int32)
+        y_mask = np.zeros((batch_size, self.caption_step+1), dtype=np.int32)
+        
+        for i in range(0, len(self.video_names), batch_size):
+            for j in range(batch_size):
+                x, y = q.get()
+                
+                if vec == QUEUE_END:
+                    x_batch = np.delete(x_batch, range(j, batch_size), axis=0)
+                    y_batch = np.delete(y_batch, range(j, batch_size), axis=0)
+                    y_mask = np.delete(y_mask, range(j, batch_size), axis=0)
+                    break
+                
+                x_batch[j, ...] = x
+                y_batch[j,:len(y)] = y
+                y_mask[j, :len(y)] = 1
+                
+            yield x_batch, y_batch
+        
