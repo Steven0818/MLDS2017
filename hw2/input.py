@@ -1,9 +1,10 @@
 import numpy as np
 import multiprocessing as mp
 import random
+import os
 
 class DataLoader():
-    def __init__(self, input_json, data_path='data/training_data/feat' ,frame_step=80, frame_dim=4096, caption_step=30):
+    def __init__(self, input_json, data_path='data/training_data/feat' ,frame_step=80, frame_dim=4096, caption_step=45 ,vocab_size = 3000):
         self.vocab_size = vocab_size
         self.data_path = data_path
         self.frame_step = frame_step
@@ -13,11 +14,11 @@ class DataLoader():
         self.video_names = []
         self.cap_sentences = []
         for video in input_json:
-            for sentence in datum['caption']:
-                self.video_names.append(datum['id'])
+            for sentence in video['caption']:
+                self.video_names.append(video['id'])
                 self.cap_sentences.append(sentence)
-                
-                
+        self.shuffle()
+
     def shuffle(self):
         z = zip(self.video_names, self.cap_sentences)
         random.shuffle(z)
@@ -31,7 +32,7 @@ class DataLoader():
             for i, filename in enumerate(self.video_names):
                 filepath = os.path.join(self.data_path, filename + '.npy')
                 x = np.load(filepath)                
-                y = np.array(cap_sentences[i]).astype(np.int32)
+                y = np.array(self.cap_sentences[i]).astype(np.int32)
                 q.put((x,y))
             
             q.put(QUEUE_END)
@@ -49,17 +50,16 @@ class DataLoader():
         
         for i in range(0, len(self.video_names), batch_size):
             for j in range(batch_size):
-                x, y = q.get()
+                vec = q.get()
                 
                 if vec == QUEUE_END:
                     x_batch = np.delete(x_batch, range(j, batch_size), axis=0)
                     y_batch = np.delete(y_batch, range(j, batch_size), axis=0)
                     y_mask = np.delete(y_mask, range(j, batch_size), axis=0)
                     break
-                
+                x, y = vec
                 x_batch[j, ...] = x
                 y_batch[j,:len(y)] = y
                 y_mask[j, :len(y)] = 1
                 
-            yield x_batch, y_batch
-        
+            yield x_batch, y_batch,y_mask
