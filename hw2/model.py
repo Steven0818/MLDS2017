@@ -1,9 +1,10 @@
 import tensorflow as tf
 import numpy as np
+import random
 
 class S2VT_model():
     
-    def __init__(self, batch_size=20, frame_steps=80, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300):
+    def __init__(self, batch_size=20, frame_steps=80, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300, schedule_sampling_converge=500):
         
         self.batch_size = batch_size
         self.frame_steps = frame_steps
@@ -11,6 +12,7 @@ class S2VT_model():
         self.caption_steps = caption_steps
         self.vocab_size = vocab_size
         self.dim_hidden = dim_hidden
+        self.schedule_sampling_converge = schedule_sampling_converge
 
         ## Graph input
         self.frame = tf.placeholder(tf.float32, [batch_size, frame_steps, frame_feat_dim])    
@@ -121,6 +123,11 @@ class S2VT_model():
         return cost
     def initialize(self):
         self.sess.run(tf.global_variables_initializer()) 
+    
+    def schedule_sampling(self):
+        prob = self.global_step / self.schedule_sampling_converge
+        return random.random() > prob
+
 
 class S2VT_attention_model():
     
@@ -132,7 +139,7 @@ class S2VT_attention_model():
         self.caption_steps = caption_steps
         self.vocab_size = vocab_size
         self.dim_hidden = dim_hidden
-        
+    
         ## Graph input
         self.frame = tf.placeholder(tf.float32, [batch_size, frame_steps, frame_feat_dim])    
         self.caption = tf.placeholder(tf.int32, [batch_size, caption_steps+1])
@@ -200,7 +207,6 @@ class S2VT_attention_model():
                         
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                output2, cap_state = cap_lstm(tf.concat([current_word_embed, output1], 1), cap_state)
                 
             cap_lstm_outputs.append(output2)
 
@@ -230,14 +236,4 @@ class S2VT_attention_model():
         return cost
     
     def initialize(self):
-        self.sess.run(tf.global_variables_initializer()) 
-
-
-        
-        
-        
-            
-        
-            
-
-        
+        self.sess.run(tf.global_variables_initializer())
