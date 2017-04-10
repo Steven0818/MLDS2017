@@ -1,14 +1,14 @@
 import sys
 import json
 import numpy as np
-
+import model
 import util
 import input
 
 VOCAB_SIZE = 3000
 FRAME_STEP = 80
 FRAME_DIM = 4096
-BATCH_SIZE = 100
+BATCH_SIZE = 20
 CAPTION_STEP = 45
 
 train_npy_path = 'data/training_data/feat'
@@ -20,6 +20,11 @@ def main():
     #                    testlabel_json='data/testing_public_label.json',
     #                    dict_path='data/dict.json')
 
+    print ("building model...")
+    S2VT = model.S2VT_model(batch_size=BATCH_SIZE, caption_steps=CAPTION_STEP)
+    S2VT.initialize()
+    print ("building model successfully...")
+    
     d_word2idx = json.load(open('data/dict.json', 'r'))
     tr_in_idx = util.get_tr_in_idx(trainlable_json='data/training_label.json', dict_path='data/dict.json')
 
@@ -34,7 +39,10 @@ def main():
                                  )
     
     batch_generator = dataLoader.batch_gen(BATCH_SIZE)
-    # for x, y in batch_generator:
+        
+    print ("training start....")
+    for x, y , y_mask in batch_generator:
+        cost = S2VT.train(x,y,y_mask)
 
 if __name__ == '__main__':
     main()

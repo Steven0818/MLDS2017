@@ -62,4 +62,4 @@ class DataLoader():
                 y_batch[j,:len(y)] = y
                 y_mask[j, :len(y)] = 1
                 
-            yield x_batch, y_batch
+            yield x_batch, y_batch,y_mask
