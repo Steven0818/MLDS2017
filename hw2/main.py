@@ -25,14 +25,12 @@ def test(model, test_data, dict_rev, global_step, output_path='result/'):
     # print(sum(1 for i in test_batch_generator))
     score = 0
     for x, video_ids, captions in test_data:
-        print(len(x))
         result = model.predict(x)
         ## remove eos
         sentences = [' '.join([dict_rev[str(word)] for word in trim(sen.tolist())]) for sen in result[0]]
         answers.extend(list(zip(video_ids, sentences)))
         for index, answer in enumerate(sentences):
             score += np.mean(np.array([eval.BLEU(answer, cap) for cap in captions[index]]))
-    print(answers)
     print('BLEU score of step {0}: {1}'.format(global_step, score/len(answers)))
     json.dump([{'caption': cap, 'id:': vid} for vid, cap in answers],
               open(output_path + 'result_' +str(global_step) + '.json', 'w'))
