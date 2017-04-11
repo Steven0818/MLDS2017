@@ -11,6 +11,7 @@ FRAME_STEP = 80
 FRAME_DIM = 4096
 BATCH_SIZE = 20
 CAPTION_STEP = 45
+EPOCH = 1000
 
 train_npy_path = 'data/training_data/feat'
 
@@ -70,21 +71,22 @@ def main():
                                         shuffle=False
                                         )
     test_batch = test_data_loader.get_data(BATCH_SIZE)
-    # for x, video_ids, captions in test_batch:
-    #     print(len(captions),len(x), len(video_ids))
-    
-    batch_generator = dataLoader.batch_gen(BATCH_SIZE)
+
     global_step = 0
-    batch_count = 0
+    
     print ("training start....")
-    for x, y , y_mask in batch_generator:
-        cost = S2VT.train(x,y,y_mask)
-        global_step += 1
-        batch_count += 1
-        if global_step % 100 == 0:
-            print('global_step {0} cost: {1}'.format(global_step, cost))
-        if global_step % 1000 == 0:
-            test(S2VT, test_batch, d_idx2word, global_step)
+    for i in range(EPOCH):
+        batch_generator = dataLoader.batch_gen(BATCH_SIZE)
+        batch_count = 0
+        for x, y , y_mask in batch_generator:
+            cost = S2VT.train(x,y,y_mask)
+            global_step += 1
+            batch_count += 1
+            if global_step % 100 == 0:
+                print('global_step {0} cost: {1}'.format(global_step, cost))
+            if global_step % 1000 == 0:
+                test(S2VT, test_batch, d_idx2word, global_step)
+        print('Epoch {0} end:'.format(i))
 
 if __name__ == '__main__':
     main()
