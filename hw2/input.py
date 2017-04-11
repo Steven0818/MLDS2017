@@ -20,9 +20,9 @@ class DataLoader():
         self.shuffle()
 
     def shuffle(self):
-        z = zip(self.video_names, self.cap_sentences)
+        z = list(zip(self.video_names, self.cap_sentences))
         random.shuffle(z)
-        self.video_names, self.cap_sentences = map(list, zip(*z))
+        self.video_names, self.cap_sentences = zip(*z)
         
     def batch_gen(self, batch_size):
         QUEUE_END = '__QUEUE_END105834569xx'
