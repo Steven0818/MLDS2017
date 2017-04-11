@@ -38,7 +38,7 @@ class S2VT_model():
         with tf.variable_scope("att_lstm"):
             att_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
         with tf.variable_scope("cap_lstm"):
-            cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)            
+            cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
         
         att_state = (tf.zeros([batch_size, dim_hidden]),tf.zeros([batch_size, dim_hidden]))
         cap_state = (tf.zeros([batch_size, dim_hidden]),tf.zeros([batch_size, dim_hidden]))
@@ -66,7 +66,24 @@ class S2VT_model():
                     tf.get_variable_scope().reuse_variables()
                 output2, cap_state = cap_lstm(tf.concat([padding, output1], 1), cap_state)
         
-        ## Decoding stage        
+        ## Decoding stage
+        ## Training util
+        def train_cap(encoder_output, prev_state):
+            with tf.device('/cpu:0'):
+                current_word_embed = tf.nn.embedding_lookup(
+                    embedding, self.caption[:, i])
+                output, state = cap_lstm(tf.concat([current_word_embed, encoder_output], 1), prev_state)
+                m_state, c_state = state
+                return output, m_state, c_state
+        def test_cap(encoder_output, prev_output,  prev_state):
+            ##  TODO: beam search
+            word_index = tf.argmax(prev_output, axis=1)
+            word_emb = tf.nn.embedding_lookup(embedding, self.caption[:, i])
+            output, state = cap_lstm(tf.concat([word_emb, encoder_output], 1), prev_state)
+            m_state, c_state = state
+            return output, m_state, c_state
+
+
         for i in range(caption_steps):
             
             with tf.variable_scope('att_lstm'):
@@ -75,21 +92,14 @@ class S2VT_model():
                         
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                if self.train_state:
-                    with tf.device('/cpu:0'):
-                        current_word_embed = tf.nn.embedding_lookup(embedding, self.caption[:,i])
-                    output2, cap_state = cap_lstm(tf.concat([current_word_embed, output1], 1), cap_state)
-                    cap_lstm_outputs.append(output2)
-                else:
-                    ######  todo: beam search 
-                    word_vec = tf.zeros([batch_size, dim_hidden])
-                    if i==0:
-                        word_vec[4] = 1 ## input <BOS> 
-                    else:
-                        word_vec[tf.arg_max(cap_lstm_outputs[i-1])] = 1 
-                    output2, cap_state = cap_lstm(tf.concat([word_vec, output1], 1), cap_state)
-                    cap_lstm_outputs.append(output2)
+                if i == 0:
+                    output2 = tf.one_hot([4]*batch_size, vocab_size)
+                # output2, cap_state = test_cap(output1, output2, cap_state)
 
+                output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(output1, cap_state), lambda: test_cap(output1, output2, cap_state))
+                cap_state = (m_state, c_state)
+                cap_lstm_outputs.append(output2)
+                
         
 
 
@@ -114,7 +124,8 @@ class S2VT_model():
     def train(self, input_frame, input_caption,input_caption_mask, keep_prob=0.5):
         _,cost = self.sess.run([self.train_op,self.cost],feed_dict={self.frame:input_frame, 
                                                                     self.caption:input_caption, 
-                                                                    self.caption_mask:input_caption_mask})
+                                                                    self.caption_mask:input_caption_mask,
+                                                                    self.train_state:True})
         return cost
    
     def predict(self, input_frame):
