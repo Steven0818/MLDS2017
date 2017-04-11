@@ -4,9 +4,9 @@ import random
 
 class S2VT_model():
     
-    def __init__(self, batch_size=20, frame_steps=80, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300, schedule_sampling_converge=500):
+    def __init__(self, frame_steps=80, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300, schedule_sampling_converge=500):
         
-        self.batch_size = batch_size
+
         self.frame_steps = frame_steps
         self.frame_feat_dim = frame_feat_dim
         self.caption_steps = caption_steps
@@ -15,9 +15,13 @@ class S2VT_model():
         self.schedule_sampling_converge = schedule_sampling_converge
 
         ## Graph input
-        self.frame = tf.placeholder(tf.float32, [batch_size, frame_steps, frame_feat_dim])    
-        self.caption = tf.placeholder(tf.int32, [batch_size, caption_steps+1])
-        self.caption_mask = tf.placeholder(tf.float32, [batch_size, caption_steps+1])
+        self.frame = tf.placeholder(tf.float32, [None, frame_steps, frame_feat_dim])
+        self.caption = tf.placeholder(tf.int32, [None, caption_steps+1])
+        self.caption_mask = tf.placeholder(tf.float32, [None, caption_steps+1])
+        batch_frame = tf.shape(self.frame)[0]
+        batch_caption = tf.shape(self.caption)[0]
+        tf.Assert(tf.equal(batch_frame, batch_caption), [batch_frame, batch_caption])
+        batch_size = batch_frame
         self.train_state = tf.placeholder(tf.bool)
 
         
@@ -78,12 +82,11 @@ class S2VT_model():
         def test_cap(encoder_output, prev_output,  prev_state):
             ##  TODO: beam search
             word_index = tf.argmax(prev_output, axis=1)
-            word_emb = tf.nn.embedding_lookup(embedding, self.caption[:, i])
+            word_emb = tf.nn.embedding_lookup(embedding, word_index)
             output, state = cap_lstm(tf.concat([word_emb, encoder_output], 1), prev_state)
             m_state, c_state = state
             return output, m_state, c_state
-
-
+        output2 = tf.tile(tf.one_hot([4], vocab_size), [batch_size, 1])
         for i in range(caption_steps):
             
             with tf.variable_scope('att_lstm'):
@@ -92,8 +95,7 @@ class S2VT_model():
                         
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                if i == 0:
-                    output2 = tf.one_hot([4]*batch_size, vocab_size)
+                    
                 # output2, cap_state = test_cap(output1, output2, cap_state)
 
                 output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(output1, cap_state), lambda: test_cap(output1, output2, cap_state))
@@ -103,10 +105,11 @@ class S2VT_model():
         
 
 
-        output = tf.reshape(tf.concat(cap_lstm_outputs , 1), [-1, dim_hidden])                
+        output = tf.reshape(tf.concat(cap_lstm_outputs , 1), [-1, dim_hidden]) 
+
+        ## shape (batch_size*caption_steps, vocab_size)               
         onehot_word_logits = tf.nn.xw_plus_b(output, w_word_onehot, b_word_onehot)
-        
-        self.predict_result = tf.reshape(onehot_word_logits, [batch_size, caption_steps, vocab_size] )
+        self.predict_result = tf.reshape(tf.argmax(onehot_word_logits[:,2:], 1)+2, [batch_size, caption_steps])
         
         loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example([onehot_word_logits],
                                                                   [tf.reshape(self.caption[:,1:], [-1])],
@@ -129,11 +132,13 @@ class S2VT_model():
         return cost
    
     def predict(self, input_frame):
-        _,cost = self.sess.run([self.train_op,self.cost],feed_dict={self.frame:input_frame,
-                                                                    self.train_state:False})
-        return cost
+        padding = np.zeros([input_frame.shape[0], self.caption_steps + 1])
+        words = self.sess.run([self.predict_result], feed_dict={self.frame: input_frame,
+                                                                self.caption: padding,
+                                                                self.train_state: False})
+        return words
     def initialize(self):
-        self.sess.run(tf.global_variables_initializer()) 
+        self.sess.run(tf.global_variables_initializer())
     
     def schedule_sampling(self):
         prob = self.global_step / self.schedule_sampling_converge
