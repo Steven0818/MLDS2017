@@ -87,7 +87,6 @@ def main():
             print('global_step {0} cost: {1}'.format(global_step, cost))
         if global_step % 1000 == 0:
             test(S2VT, test_batch, d_idx2word, global_step)
-            break
 
 if __name__ == '__main__':
     main()
