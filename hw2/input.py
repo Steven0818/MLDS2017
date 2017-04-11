@@ -87,12 +87,12 @@ class TestDataLoader():
             for j in range(batch_size):     
                 if i + j >= len(self.video_names):
                     x_batch = np.delete(x_batch, range(j, batch_size), axis=0)
-                    end = i + j - 1
+                    end = i + j
                     break
                 filename = self.video_names[i + j]
                 filepath = os.path.join(self.data_path, filename + '.npy')
                 x = np.load(filepath)
 
                 x_batch[j, ...] = x
-            ret.append((x_batch, self.captions[i:end]))
+            ret.append((x_batch, self.video_names[i:end], self.captions[i:end]))
         return ret
