@@ -21,7 +21,7 @@ def main():
     #                    dict_path='data/dict.json')
 
     print ("building model...")
-    S2VT = model.S2VT_model(batch_size=BATCH_SIZE, caption_steps=CAPTION_STEP)
+    S2VT = model.S2VT_attention_model(batch_size=BATCH_SIZE, caption_steps=CAPTION_STEP)
     S2VT.initialize()
     print ("building model successfully...")
     

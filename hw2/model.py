@@ -168,27 +168,25 @@ class S2VT_attention_model():
         frame_embedding = tf.nn.xw_plus_b( frame_flat, w_frame_embed, b_frame_embed )
         frame_embedding = tf.reshape(frame_embedding, [batch_size, frame_steps, dim_hidden])        
         
-        
-        cap_lstm_outputs = []
-        
+        enc_lstm_outputs = []
+        dec_lstm_outputs = []
         ## Encoding stage
         for i in range(frame_steps):
 
             with tf.variable_scope('att_lstm'):
                 if i > 0:
                     tf.get_variable_scope().reuse_variables()
-                    output1, att_state = att_lstm(frame_embedding[:,i,:], att_state)
-                else:
-                    output1, att_state = att_lstm(frame_embedding[:,i,:], att_state)
+                output1, att_state = att_lstm(frame_embedding[:,i,:], att_state)
             ##input shape of cap_lstm2: [batch_size, 2*dim_hidden]
             with tf.variable_scope('cap_lstm'):
                 if i > 0:
                     tf.get_variable_scope().reuse_variables()
-                    output2, cap_state = cap_lstm(tf.concat([padding, output1], 1), cap_state)
-                else:
-                    output2, cap_state = cap_lstm(tf.concat([padding, output1], 1), cap_state)
-        ## Decoding stage        
+                output2, cap_state = cap_lstm(tf.concat([padding, output1], 1), cap_state)
+            enc_lstm_outputs.append(output2)
         
+        ## (batch_size,frame_step,dim_hidden)
+        enc_lstm_outputs = tf.reshape(tf.concat(enc_lstm_outputs , 1),[self.batch_size,self.frame_steps,self.dim_hidden])
+        ## Decoding stage        
         for i in range(caption_steps):
             
             with tf.device('/cpu:0'):
@@ -201,10 +199,11 @@ class S2VT_attention_model():
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
                 output2, cap_state = cap_lstm(tf.concat([current_word_embed, output1], 1), cap_state)
-                
-            cap_lstm_outputs.append(output2)
+            ## Attention
+            attention_output = local_attention(output2,enc_lstm_outputs)
+            dec_lstm_outputs.append(attention_output)
 
-        output = tf.reshape(tf.concat(cap_lstm_outputs , 1), [-1, dim_hidden])                
+        output = tf.reshape(tf.concat(dec_lstm_outputs , 1), [-1, dim_hidden])                
         onehot_word_logits = tf.nn.xw_plus_b(output, w_word_onehot, b_word_onehot)
         
         self.predict_result = tf.reshape(onehot_word_logits, [batch_size, caption_steps, vocab_size] )
@@ -225,17 +224,58 @@ class S2VT_attention_model():
     def train(self, input_frame, input_caption,input_caption_mask, keep_prob=0.5):
         _,cost = self.sess.run([self.train_op,self.cost],feed_dict={self.frame:input_frame, 
                                                                     self.caption:input_caption, 
-                                                                    self.caption_mask:input_caption_mask,
-                                                                    self.train_state:True})
+                                                                    self.caption_mask:input_caption_mask})
         return cost
     
     def initialize(self):
         self.sess.run(tf.global_variables_initializer()) 
 
 
+    def local_attention(self,decode_vec,encode_vecs):
+        wp = tf.get_variable("w_position_emb_1", [self.dim_hidden,self.dim_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
+        vp = tf.get_variable("w_position_emb_2", [1,self.dim_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
         
+
+        ## (batch_size,frame_step)
+        score = self.align(decode_vec,encode_vecs)
+        ## (dim_hidden,batch_size)
+        decode_vec_t = tf.transpose(decode_vec,[1,0])
+        ## (1,batch_size)
+        pos_feature = tf.matmul(vp,tf.tanh(tf.matmul(wp,decode_vec_t)))
+        ## (1,batch_size)
+        pt = tf.reshape(self.frame_steps*tf.sigmoid(pos_feature),[self.batch_size])
+        local_center = pt
+        ## (batch_size)
+        tf.to_int32(local_center)
+        half_window = tf.constant(4,shape=tf.shape(local_center))
+        delta = half_window/2
+        s = tf.range(self.frame_steps)
+        def index_frame(ele):
+            frames,center,half_width,pt,score = ele
+            score = score*tf.exp(-(s-pt)^2/(2*delta^2))
+            attention_vec = tf.matmul(score[center-half_width,center+half_width],frames[center-half_width,center+half_width,:])
+            return attention_vec
+        ## (batch_size,dim_hidden)
+        attention_vec = tf.map_fn(index_frame,[tf.encode_vecs,local_center,half_window,pt,score])
         
+
+
+        local_center = tf.cond(local_center+half_window >= self.frame_steps, lambda:self.frame_steps-half_window-1, lambda:local_center)
+        local_center = tf.cond(local_center-half_window < 0, lambda:half_window
+                                , lambda:local_center)
+                                
         
+    
+
+    def align(self,decode_vec,encode_vecs):
+        wa = tf.get_variable("w_align_emb",[self.dim_hidden,self.dim_hidden],initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
+        ## (batch_size,dim_hidden,frame_step)
+        encode_vecs_t = tf.transpose(encode_vecs,[0,2,1])
+        ## (batch_size,1,dim_hidden)*(batch_size,dim_hidden,frame_step)
+        score = tf.matmul(tf.expand_dims(tf.matmul(decode_vec,wa),1),encode_vecs_t)
+        score = tf.reshape(score,[self.batch_size,self.frame_steps]
+        ## (batch_size,frame_step)
+        return score
             
         
             
