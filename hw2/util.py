@@ -17,7 +17,8 @@ The dictionary contains only top-{VOCAB_COUNT} most common word.
 def build_word2idx_dict(vocab_size=3000,
                         trainlable_json='data/training_label.json', 
                         testlabel_json='data/testing_public_label.json',
-                        dict_path='data/dict.json'):
+                        dict_path='data/dict.json',
+                        dict_rev_path='data/dict_rev.json'):
         
     def _get_words_in_json(filepath):
         json_obj = json.load(open(filepath, 'r'))
@@ -45,14 +46,18 @@ def build_word2idx_dict(vocab_size=3000,
     2936 words appears at least 3 times.
     """
     
-    dictionary = {}
+    dictionary = dict()
+    dictionary_rev = dict()
     for k, value in enumerate(word_counter.most_common(VOCAB_COUNT - 2)):
         dictionary[value[0]] = k+2
+        dictionary_rev[int(k+2)] = value[0]
     # 0 for padding
     # 1 for unknown
         
     with open(dict_path, 'w') as f:
         json.dump(dictionary, f)
+    with open(dict_rev_path, 'w') as f:
+        json.dump(dictionary_rev, f)
 
 
     
@@ -79,6 +84,4 @@ def get_tr_in_idx(trainlable_json='data/training_label.json', dict_path='data/di
             
         new_json_obj.append(new_datum)
     
-    return new_json_obj
-    
-    
+    return new_json_obj   
