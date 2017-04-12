@@ -74,8 +74,7 @@ class S2VT_model():
         ## Training util
         def train_cap(prev_endcoder_output, prev_decoder_output, prev_state):
             with tf.device('/cpu:0'):
-                word_index = tf.argmax(prev_decoder_output, axis=1)
-                word_embed = tf.nn.embedding_lookup(embedding, word_index)
+                word_embed = tf.nn.embedding_lookup(embedding, prev_decoder_output)
                 output, state = cap_lstm(
                     tf.concat([word_embed, prev_endcoder_output], 1), prev_state)
                 m_state, c_state = state
@@ -100,7 +99,7 @@ class S2VT_model():
                     
                 # output2, cap_state = test_cap(output1, output2, cap_state)
 
-                output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(output1, self.caption[:i], cap_state), lambda: test_cap(output1, output2, cap_state))
+                output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(output1, self.caption[:,i], cap_state), lambda: test_cap(output1, output2, cap_state))
                 cap_state = (m_state, c_state)
                 cap_lstm_outputs.append(output2)
                 
