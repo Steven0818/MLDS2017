@@ -222,7 +222,7 @@ class S2VT_attention_model():
             with tf.variable_scope('cap_lstm'):
                 if i > 0:
                     tf.get_variable_scope().reuse_variables()
-                output2, cap_state = att_lstm(tf.concat([padding, output1], 1), cap_state)
+                output2, cap_state = cap_lstm(tf.concat([padding, output1], 1), cap_state)
             enc_lstm_outputs.append(output2)
         
         ## (batch_size,frame_step,dim_hidden)
@@ -258,7 +258,7 @@ class S2VT_attention_model():
                         
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(att_lstm,output1, self.caption[:,i],output2,self.global_step,cap_state), lambda: test_cap(att_lstm,output1, output2, cap_state))
+                output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(cap_lstm,output1, self.caption[:,i],output2,self.global_step,cap_state), lambda: test_cap(cap_lstm,output1, output2, cap_state))
                 cap_state = (m_state, c_state)
             ## Attention
             #output2 = self.local_attention(output2,enc_lstm_outputs,wp,vp,wa)
