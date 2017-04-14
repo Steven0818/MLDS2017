@@ -21,7 +21,7 @@ def trim(sen):
     else:
         return sen
 
-def test(model, test_data, dict_rev, global_step, output_path='result/'):
+def test(model, test_data, dict_rev, global_step, output_path='result/' , train_test='test'):
     answers = []
     # print(sum(1 for i in test_batch_generator))
     score = 0
@@ -32,21 +32,21 @@ def test(model, test_data, dict_rev, global_step, output_path='result/'):
         answers.extend(list(zip(video_ids, sentences)))
         for index, answer in enumerate(sentences):
             score += np.mean(np.array([eval.BLEU(answer, cap) for cap in captions[index]]))
-    print('BLEU score of step {0}: {1}'.format(global_step, score/len(answers)))
+    print('{0} BLEU score of step {1}: {2}'.format(train_test, global_step, score/len(answers)))
     json.dump([{'caption': cap, 'id:': vid} for vid, cap in answers],
-              open(output_path + 'result_' +str(global_step) + '.json', 'w'))
+              open(output_path + train_test + '_result_' +str(global_step) + '.json', 'w'))
         
 
 
 def main():
 
-    # util.build_word2idx_dict(vocab_size=VOCAB_SIZE,
-    #                    trainlable_json='data/training_label.json', 
-    #                    testlabel_json='data/testing_public_label.json',
-    #                    dict_path='data/dict.json')
+    util.build_word2idx_dict(vocab_size=VOCAB_SIZE,
+                       trainlable_json='data/training_label.json', 
+                       testlabel_json='data/testing_public_label.json',
+                       dict_path='data/dict.json')
 
     print ("building model...")
-    S2VT = model.S2VT_model(caption_steps=CAPTION_STEP)
+    S2VT = model.S2VT_attention_model(caption_steps=CAPTION_STEP)
     S2VT.initialize()
     print ("building model successfully...")
     
@@ -70,10 +70,19 @@ def main():
                                         vocab_size=VOCAB_SIZE,
                                         shuffle=False
                                         )
+    train_label = json.load(open('data/training_label.json'))
+    train_test_data_loader = input.TestDataLoader(train_label,
+                                                  data_path = 'data/training_data/feat',
+                                                  frame_step = FRAME_STEP,
+                                                  frame_dim = FRAME_DIM,
+                                                  caption_step=CAPTION_STEP,
+                                                  vocab_size=VOCAB_SIZE,
+                                                  shuffle=False)
     test_batch = test_data_loader.get_data(BATCH_SIZE)
+    train_test_batch = train_test_data_loader.get_data(BATCH_SIZE)
 
     global_step = 0
-    
+    batch_generator = dataLoader.batch_gen(BATCH_SIZE)
     print ("training start....")
     for i in range(EPOCH):
         batch_generator = dataLoader.batch_gen(BATCH_SIZE)
@@ -85,7 +94,9 @@ def main():
             if global_step % 100 == 0:
                 print('global_step {0} cost: {1}'.format(global_step, cost))
             if global_step % 1000 == 0:
-                test(S2VT, test_batch, d_idx2word, global_step)
+                test(S2VT, test_batch, d_idx2word, global_step,train_test = 'test')
+                test(S2VT, train_test_batch, d_idx2word, global_step,train_test = 'train')
+            
         print('Epoch {0} end:'.format(i))
 
 if __name__ == '__main__':
