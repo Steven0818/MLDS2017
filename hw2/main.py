@@ -7,7 +7,7 @@ import input
 import eval
 
 VOCAB_SIZE = 3000
-FRAME_STEP = 80
+FRAME_STEP = 20
 FRAME_DIM = 4096
 BATCH_SIZE = 20
 CAPTION_STEP = 45
@@ -23,7 +23,6 @@ def trim(sen):
 
 def test(model, test_data, dict_rev, global_step, output_path='result/' , train_test='test'):
     answers = []
-    # print(sum(1 for i in test_batch_generator))
     score = 0
     for x, video_ids, captions in test_data:
         result = model.predict(x)

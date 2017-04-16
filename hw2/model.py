@@ -149,7 +149,7 @@ class S2VT_model():
 
 class S2VT_attention_model():
     
-    def __init__(self, frame_steps=80, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300, schedule_sampling_converge=500):
+    def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300, schedule_sampling_converge=500):
         
         self.frame_steps = frame_steps
         self.frame_feat_dim = frame_feat_dim
@@ -159,7 +159,7 @@ class S2VT_attention_model():
     
         ## Graph input
         self.frame = tf.placeholder(tf.float32, [None, frame_steps, frame_feat_dim])    
-        self.caption = tf.placeholder(tf.int32, [None, caption_steps+1])
+        self.caption = tf.placeholder(tf.int32, [None,caption_steps+1])
         self.caption_mask = tf.placeholder(tf.float32, [None, caption_steps+1])
         batch_frame = tf.shape(self.frame)[0]
         batch_caption = tf.shape(self.caption)[0]
@@ -182,14 +182,14 @@ class S2VT_attention_model():
         b_word_onehot = tf.get_variable("b_word_onehot", [vocab_size], initializer=tf.constant_initializer(0.0))
         
         ## attention_position_embedding
-        #wp = tf.get_variable("w_position_emb_1", [self.dim_hidden,self.dim_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
-        #vp = tf.get_variable("w_position_emb_2", [1,self.dim_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
+        wp = tf.get_variable("w_position_emb_1", [self.dim_hidden,self.dim_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
+        vp = tf.get_variable("w_position_emb_2", [1,self.dim_hidden], initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))
 
         ## attention_align_embedding
-        #wa = tf.get_variable("w_align_emb",[self.dim_hidden,self.dim_hidden],initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))        
+        wa = tf.get_variable("w_align_emb",[self.dim_hidden,self.dim_hidden],initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))        
 
         ## attention_align_embedding
-        #wc = tf.get_variable("w_attention_emb",[2*self.dim_hidden,self.dim_hidden],initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))        
+        wc = tf.get_variable("w_attention_emb",[2*self.dim_hidden,self.dim_hidden],initializer= tf.contrib.layers.xavier_initializer(dtype=tf.float32))        
 
 
         ## two lstm param
@@ -206,7 +206,7 @@ class S2VT_attention_model():
         ##################### Computing Graph ########################
         
         frame_flat = tf.reshape(self.frame, [-1, frame_feat_dim])
-        frame_embedding = tf.tanh(tf.nn.xw_plus_b( frame_flat, w_frame_embed, b_frame_embed ))
+        frame_embedding = tf.nn.xw_plus_b( frame_flat, w_frame_embed, b_frame_embed )
         frame_embedding = tf.reshape(frame_embedding, [self.batch_size, frame_steps, dim_hidden])        
         
         enc_lstm_outputs = []
@@ -222,6 +222,7 @@ class S2VT_attention_model():
             with tf.variable_scope('cap_lstm'):
                 if i > 0:
                     tf.get_variable_scope().reuse_variables()
+                #tf.get_variable_scope().reuse_variables()
                 output2, cap_state = cap_lstm(tf.concat([padding, output1], 1), cap_state)
             enc_lstm_outputs.append(output2)
         
@@ -231,10 +232,10 @@ class S2VT_attention_model():
         ## Decoding stage
         ## Training util
         def train_cap(input_lstm,prev_endcoder_output,real_ans,prev_decoder_output,global_step,prev_state):
-            #word_index = tf.argmax(prev_decoder_output,axis = 1)
+           word_index = tf.argmax(prev_decoder_output,axis = 1)
             
            with tf.device('/cpu:0'):
-                word_embed = tf.nn.embedding_lookup(embedding,real_ans)
+                word_embed = tf.nn.embedding_lookup(embedding,word_index)
                 output, state = input_lstm(
                     tf.concat([word_embed, prev_endcoder_output], 1), prev_state)
                 m_state, c_state = state
@@ -254,7 +255,7 @@ class S2VT_attention_model():
             
             with tf.variable_scope('att_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                output1, att_state = att_lstm(padding, att_state)
+                output1, att_state = att_lstm(tf.concat([padding],1), att_state)
                         
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
@@ -320,7 +321,7 @@ class S2VT_attention_model():
         pt = tf.reshape(self.frame_steps*tf.sigmoid(pos_feature),[self.batch_size])
         local_center = tf.round(pt)
 
-        half_window = 8 #tf.constant(4,shape = [1])
+        half_window = 2 #tf.constant(4,shape = [1])
         delta = half_window/2
         
         def index_frame(ele):

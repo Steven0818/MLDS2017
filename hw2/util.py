@@ -71,7 +71,8 @@ def get_tr_in_idx(trainlable_json='data/training_label.json', dict_path='data/di
         new_datum = {} 
         new_datum['id'] = datum['id']
         new_datum['caption'] = []
-        
+
+           
         for sentence in datum['caption']:
             sentence = re.sub(replace_char, ' ', sentence).replace(".", " <eos>")
             words = [w.lower() for w in sentence.split()]
@@ -81,7 +82,7 @@ def get_tr_in_idx(trainlable_json='data/training_label.json', dict_path='data/di
             words.insert(0, '<bos>')
             
             new_datum['caption'].append([d_word2idx[w] if w in d_word2idx else 1 for w in words])
-            
+            break
         new_json_obj.append(new_datum)
     
     return new_json_obj   
