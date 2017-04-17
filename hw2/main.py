@@ -13,11 +13,8 @@ FRAME_DIM = 4096
 BATCH_SIZE = 100
 CAPTION_STEP = 45
 EPOCH = 1000
-<<<<<<< Updated upstream
 SCHEDULED_SAMPLING_CONVERGE = 5000
-=======
-SCHEDULED_SAMPLING_CONVERGE = 50
->>>>>>> Stashed changes
+
 
 train_npy_path = 'data/training_data/feat'
 
@@ -93,7 +90,6 @@ def main():
     epoch_size = len(data)
     loader = data.loader()
     print ("training start....")
-<<<<<<< Updated upstream
     for i in range(int(len(data) * EPOCH / BATCH_SIZE)):  
         time_cost = time.time()
         frames, captions, target_weights = next(loader)
@@ -108,24 +104,7 @@ def main():
         if i * BATCH_SIZE > epoch_count * epoch_size:
             print('Epoch {0} end'.format(epoch_count))
             epoch_count += 1
-               
-=======
-    for i in range(EPOCH):
-        batch_generator = dataLoader.batch_gen(BATCH_SIZE)
-        batch_count = 0
-        for x, y , y_mask in batch_generator:
-            cost = S2VT.train(
-                x, y, y_mask, scheduled_sampling_prob=i/SCHEDULED_SAMPLING_CONVERGE)
-            global_step += 1
-            batch_count += 1
-            if global_step % 20 == 0:
-                print('global_step {0} cost: {1}'.format(global_step, cost))
-            if global_step % 200 == 0:
-                test(S2VT, test_batch, d_idx2word, global_step,train_test = 'test')
-                test(S2VT, train_test_batch, d_idx2word, global_step,train_test = 'train')
-            
-        print('Epoch {0} end:'.format(i))
->>>>>>> Stashed changes
+
 
 if __name__ == '__main__':
     main()
