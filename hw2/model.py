@@ -157,8 +157,9 @@ class S2VT_attention_model():
         self.caption_steps = caption_steps
         self.vocab_size = vocab_size
         self.dim_hidden = dim_hidden
-    
+        
         ## Graph input
+    
         self.frame = tf.placeholder(tf.float32, [None, frame_steps, frame_feat_dim])    
         self.caption = tf.placeholder(tf.int64, [None,caption_steps+1])
         self.caption_mask = tf.placeholder(tf.float32, [None, caption_steps+1])
@@ -169,6 +170,7 @@ class S2VT_attention_model():
         tf.Assert(tf.equal(batch_frame, batch_caption), [batch_frame, batch_caption])
         self.batch_size = batch_frame
         self.train_state = tf.placeholder(tf.bool)
+        self.keep_prob = tf.placeholder(tf.float32)
         
         self.global_step = tf.Variable(0, trainable=False)
         ## frame Embedding param 
@@ -198,8 +200,10 @@ class S2VT_attention_model():
         ## two lstm param
         with tf.variable_scope("att_lstm"):
             att_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
+            att_lstm = tf.contrib.rnn.DropoutWrapper(att_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)
         with tf.variable_scope("cap_lstm"):
-            cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)            
+            cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
+            cap_lstm = tf.contrib.rnn.DropoutWrapper(cap_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)            
         
         att_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
         cap_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
@@ -302,7 +306,8 @@ class S2VT_attention_model():
                                                                     self.caption:input_caption, 
                                                                     self.caption_mask:input_caption_mask,
                                                                     self.train_state:True,
-                                                                    self.scheduled_sampling_prob:scheduled_sampling_prob})
+                                                                    self.scheduled_sampling_prob:scheduled_sampling_prob,
+                                                                    self.keep_prob:keep_prob})
         return cost
    
     def predict(self, input_frame):
@@ -310,7 +315,8 @@ class S2VT_attention_model():
         words = self.sess.run([self.predict_result], feed_dict={self.frame: input_frame,
                                                                 self.caption: padding,
                                                                 self.train_state: False,
-                                                                self.scheduled_sampling_prob: 0.0})
+                                                                self.scheduled_sampling_prob: 1.0,
+                                                                self.keep_prob: 1.0})
         return words
     def initialize(self):
         self.sess.run(tf.global_variables_initializer()) 
@@ -373,14 +379,17 @@ class Effective_attention_model():
     
         ## Graph input
         self.frame = tf.placeholder(tf.float32, [None, frame_steps, frame_feat_dim])    
-        self.caption = tf.placeholder(tf.int32, [None,caption_steps+1])
+        self.caption = tf.placeholder(tf.int64, [None,caption_steps+1])
         self.caption_mask = tf.placeholder(tf.float32, [None, caption_steps+1])
         batch_frame = tf.shape(self.frame)[0]
         batch_caption = tf.shape(self.caption)[0]
         tf.Assert(tf.equal(batch_frame, batch_caption), [batch_frame, batch_caption])
         self.batch_size = batch_frame
         self.train_state = tf.placeholder(tf.bool)
-        
+        self.scheduled_sampling_prob = tf.placeholder(
+                tf.float32, [], name='scheduled_sampling_prob')
+        self.keep_prob = tf.placeholder(tf.float32)
+
         self.global_step = tf.Variable(0, trainable=False)
         ## frame Embedding param 
         with tf.variable_scope("frame_embedding"):
@@ -409,8 +418,10 @@ class Effective_attention_model():
         ## two lstm param
         with tf.variable_scope("att_lstm"):
             att_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
+            att_lstm = tf.contrib.rnn.DropoutWrapper(att_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)
         with tf.variable_scope("cap_lstm"):
-            cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)            
+            cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)        
+            cap_lstm = tf.contrib.rnn.DropoutWrapper(cap_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)                
         
         att_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
         cap_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
@@ -445,6 +456,9 @@ class Effective_attention_model():
         ## Decoding stage
         ## Training util
         def train_cap(input_lstm,real_ans,prev_decoder_output,prev_attention_output,global_step,prev_state):
+           word_index = tf.cond(self.scheduled_sampling_prob >= tf.random_uniform([], 0, 1),
+                                lambda: real_ans,
+                                lambda: tf.argmax(prev_decoder_output, axis=1))
             
            with tf.device('/cpu:0'):
                 #word_index = tf.argmax(prev_decoder_output,axis = 1)
@@ -462,14 +476,14 @@ class Effective_attention_model():
                     tf.concat([word_embed,prev_attention_output], 1), prev_state)
                 m_state, c_state = state
                 return output, m_state, c_state
-        output2 = tf.tile(tf.one_hot([4],vocab_size), [self.batch_size, 1])
+        prev_step_word = tf.tile(tf.one_hot([4], vocab_size), [self.batch_size, 1])
         attention_output = tf.zeros(shape = [self.batch_size,dim_hidden])
         ## Decoding stage
         for i in range(caption_steps):
             
             with tf.variable_scope('att_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                output1, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(att_lstm, self.caption[:,i],output2,attention_output,self.global_step,cap_state), lambda: test_cap(att_lstm, output2,attention_output,cap_state))
+                output1, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(att_lstm, self.caption[:,i],prev_step_word,attention_output,self.global_step,cap_state), lambda: test_cap(att_lstm, prev_step_word,attention_output,cap_state))
                 cap_state = (m_state, c_state)
                         
             with tf.variable_scope('cap_lstm'):
@@ -479,10 +493,10 @@ class Effective_attention_model():
             attention_output = self.local_attention(output2,enc_lstm_outputs,wp,vp,wa)
             concat_output = tf.concat([attention_output,output2] , 1)
             attention_output = tf.tanh(tf.matmul(concat_output,wc))  
-            dec_lstm_outputs.append(attention_output)
-        
-        output = tf.reshape(tf.concat(dec_lstm_outputs , 1), [-1,dim_hidden])              
-        onehot_word_logits = tf.nn.xw_plus_b(output, w_word_onehot, b_word_onehot)
+            prev_step_word = tf.nn.xw_plus_b(attention_output, w_word_onehot, b_word_onehot)
+            dec_lstm_outputs.append(prev_step_word)
+
+        onehot_word_logits = tf.reshape(tf.concat(dec_lstm_outputs , 1), [-1,vocab_size])
         
         self.predict_result = tf.reshape(tf.argmax(onehot_word_logits[:,2:], 1)+2, [self.batch_size, caption_steps])
         
@@ -505,18 +519,22 @@ class Effective_attention_model():
         
         self.sess = tf.Session(config=config)
 
-    def train(self, input_frame, input_caption,input_caption_mask, keep_prob=0.5):
+    def train(self, input_frame, input_caption,input_caption_mask, keep_prob=0.5, scheduled_sampling_prob=0.0):
         _,cost = self.sess.run([self.train_op,self.cost],feed_dict={self.frame:input_frame, 
                                                                     self.caption:input_caption, 
                                                                     self.caption_mask:input_caption_mask,
-                                                                    self.train_state:True})
+                                                                    self.train_state:True,
+                                                                    self.scheduled_sampling_prob:scheduled_sampling_prob,
+                                                                    self.keep_prob:keep_prob})
         return cost
    
     def predict(self, input_frame):
         padding = np.zeros([input_frame.shape[0], self.caption_steps + 1])
         words = self.sess.run([self.predict_result], feed_dict={self.frame: input_frame,
                                                                 self.caption: padding,
-                                                                self.train_state: False})
+                                                                self.train_state: False,
+                                                                self.scheduled_sampling_prob:1.0,
+                                                                self.keep_prob:1.0})
         return words
     def initialize(self):
         self.sess.run(tf.global_variables_initializer()) 
