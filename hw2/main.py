@@ -5,14 +5,15 @@ import model
 import util
 import input
 import eval
+import time
 
 VOCAB_SIZE = 3000
 FRAME_STEP = 20
 FRAME_DIM = 4096
-BATCH_SIZE = 20
+BATCH_SIZE = 100
 CAPTION_STEP = 45
 EPOCH = 1000
-SCHEDULED_SAMPLING_CONVERGE = 30000
+SCHEDULED_SAMPLING_CONVERGE = 5000
 
 train_npy_path = 'data/training_data/feat'
 
@@ -51,13 +52,19 @@ def main():
     tr_in_idx = util.get_tr_in_idx(trainlable_json='data/training_label.json', dict_path='data/dict.json')
     test_label = json.load(open('data/testing_public_label.json'))
 
-    dataLoader = input.DataLoader(tr_in_idx,
-                                  data_path='data/training_data/feat',
-                                  frame_step=FRAME_STEP,
-                                  frame_dim=FRAME_DIM,
-                                  caption_step=CAPTION_STEP,
-                                  vocab_size=VOCAB_SIZE
-                                 )
+    # dataLoader = input.DataLoader(tr_in_idx,
+    #                               data_path='data/training_data/feat',
+    #                               frame_step=FRAME_STEP,
+    #                               frame_dim=FRAME_DIM,
+    #                               caption_step=CAPTION_STEP,
+    #                               vocab_size=VOCAB_SIZE
+    #                              )
+    data = util.Data(
+        'data/training_data/feat',
+        json.load(open('data/training_label.json')),
+        d_word2idx,
+        d_idx2word,
+        BATCH_SIZE)
     test_data_loader = input.TestDataLoader(test_label,
                                         data_path='data/testing_data/feat',
                                         frame_step=FRAME_STEP,
@@ -78,23 +85,25 @@ def main():
     train_test_batch = train_test_data_loader.get_data(BATCH_SIZE)
 
     global_step = 0
-    batch_generator = dataLoader.batch_gen(BATCH_SIZE)
+    epoch_count = 1
+    epoch_size = len(data)
+    loader = data.loader()
     print ("training start....")
-    for i in range(EPOCH):
-        batch_generator = dataLoader.batch_gen(BATCH_SIZE)
-        batch_count = 0
-        for x, y , y_mask in batch_generator:
-            cost = S2VT.train(
-                x, y, y_mask, scheduled_sampling_prob=global_step/SCHEDULED_SAMPLING_CONVERGE)
-            global_step += 1
-            batch_count += 1
-            if global_step % 100 == 0:
-                print('global_step {0} cost: {1}'.format(global_step, cost))
-            if global_step % 1000 == 0:
-                test(S2VT, test_batch, d_idx2word, global_step,train_test = 'test')
-                test(S2VT, train_test_batch, d_idx2word, global_step,train_test = 'train')
-            
-        print('Epoch {0} end:'.format(i))
+    for i in range(int(len(data) * EPOCH / BATCH_SIZE)):  
+        time_cost = time.time()
+        frames, captions, target_weights = next(loader)
+        cost = S2VT.train(
+            frames, captions, target_weights, scheduled_sampling_prob=i / SCHEDULED_SAMPLING_CONVERGE)
+        global_step += 1
+        if global_step % 100 == 0:
+            print('global_step {0} cost: {1}'.format(global_step, cost))
+        if global_step % 1000 == 0:
+            test(S2VT, test_batch, d_idx2word, global_step,train_test = 'test')
+            test(S2VT, train_test_batch, d_idx2word, global_step,train_test = 'train')
+        if i * BATCH_SIZE > epoch_count * epoch_size:
+            print('Epoch {0} end'.format(epoch_count))
+            epoch_count += 1
+               
 
 if __name__ == '__main__':
     main()

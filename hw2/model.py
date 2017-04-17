@@ -72,9 +72,6 @@ class S2VT_model():
         
         ## Decoding stage
         ## Training util
-        def schedule_sampling(feed_prev,):
-            if feed_prev:
-                return 
         def train_cap(prev_layer_output, prev_decoder_output, prev_state):
             with tf.device('/cpu:0'):
                 word_index = tf.argmax(prev_decoder_output, axis=1)
