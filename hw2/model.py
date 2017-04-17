@@ -257,6 +257,7 @@ class S2VT_attention_model():
                 m_state, c_state = state
                 return output, m_state, c_state
         ## Decoding stage
+        prev_step_word = tf.tile(tf.one_hot([4], vocab_size), [self.batch_size, 1])
         for i in range(caption_steps):
             
             with tf.variable_scope('att_lstm'):
@@ -265,22 +266,18 @@ class S2VT_attention_model():
                         
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                if i == 0:
-                    prev_step_word = tf.tile(tf.one_hot([4], vocab_size), [self.batch_size, 1])
-                else:
-                    prev_step_word = tf.nn.xw_plus_b(
-                        output2, w_word_onehot, b_word_onehot)
                 output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(
                     cap_lstm, output1, self.caption[:, i], prev_step_word, self.global_step, cap_state), lambda: test_cap(cap_lstm, output1, prev_step_word, cap_state))
                 cap_state = (m_state, c_state)
+                prev_step_word = tf.nn.xw_plus_b(
+                    output2, w_word_onehot, b_word_onehot)
             ## Attention
             #output2 = self.local_attention(output2,enc_lstm_outputs,wp,vp,wa)
             #concat_output = tf.concat([attention_output,output2] , 1)
             #output2 = tf.tanh(tf.matmul(concat_output,wc))  
-            dec_lstm_outputs.append(output2)
+            dec_lstm_outputs.append(prev_step_word)
         
-        output = tf.reshape(tf.concat(dec_lstm_outputs , 1), [-1,dim_hidden])              
-        onehot_word_logits = tf.nn.xw_plus_b(output, w_word_onehot, b_word_onehot)
+        onehot_word_logits = tf.reshape(tf.concat(dec_lstm_outputs , 1), [-1,vocab_size])
         
         self.predict_result = tf.reshape(tf.argmax(onehot_word_logits[:,2:], 1)+2, [self.batch_size, caption_steps])
         
