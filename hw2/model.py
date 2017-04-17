@@ -4,7 +4,7 @@ import random
 
 class S2VT_model():
     
-    def __init__(self, frame_steps=80.0, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300, schedule_sampling_converge=500):
+    def __init__(self, frame_steps=80.0, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300):
         
 
         self.frame_steps = frame_steps
@@ -12,12 +12,12 @@ class S2VT_model():
         self.caption_steps = caption_steps
         self.vocab_size = vocab_size
         self.dim_hidden = dim_hidden
-        self.schedule_sampling_converge = schedule_sampling_converge
 
         ## Graph input
         self.frame = tf.placeholder(tf.float32, [None, frame_steps, frame_feat_dim])
         self.caption = tf.placeholder(tf.int32, [None, caption_steps+1])
         self.caption_mask = tf.placeholder(tf.float32, [None, caption_steps+1])
+        self.scheduled_sampling_prob = tf.placeholder(tf.float32, [], name='scheduled_sampling_prob')
         batch_frame = tf.shape(self.frame)[0]
         batch_caption = tf.shape(self.caption)[0]
         tf.Assert(tf.equal(batch_frame, batch_caption), [batch_frame, batch_caption])
@@ -72,23 +72,27 @@ class S2VT_model():
         
         ## Decoding stage
         ## Training util
-        def train_cap(prev_endcoder_output, prev_decoder_output, prev_state):
+        def schedule_sampling(feed_prev,):
+            if feed_prev:
+                return 
+        def train_cap(prev_layer_output, prev_decoder_output, prev_state):
             with tf.device('/cpu:0'):
                 word_index = tf.argmax(prev_decoder_output, axis=1)
                 word_embed = tf.nn.embedding_lookup(embedding, word_index)
                 output, state = cap_lstm(
-                    tf.concat([word_embed, prev_endcoder_output], 1), prev_state)
+                    tf.concat([word_embed, prev_layer_output], 1), prev_state)
                 m_state, c_state = state
                 return output, m_state, c_state
-        def test_cap(prev_encoder_output, prev_decoder_output, prev_state):
+        def test_cap(prev_layer_output, prev_decoder_output, prev_state):
             ##  TODO: beam search
             word_index = tf.argmax(prev_decoder_output, axis=1)
             word_embed = tf.nn.embedding_lookup(embedding, word_index)
             output, state = cap_lstm(
-                tf.concat([word_embed, prev_encoder_output], 1), prev_state)
+                tf.concat([word_embed, prev_layer_output], 1), prev_state)
             m_state, c_state = state
             return output, m_state, c_state
         output2 = tf.tile(tf.one_hot([4], vocab_size), [batch_size, 1])
+        scheduled_sampling_distribution = tf.random_uniform([caption_steps], 0, 1)
         for i in range(caption_steps):
             
             with tf.variable_scope('att_lstm'):
@@ -97,8 +101,7 @@ class S2VT_model():
                         
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                    
-                # output2, cap_state = test_cap(output1, output2, cap_state)
+
 
                 output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(output1, self.caption[:i], cap_state), lambda: test_cap(output1, output2, cap_state))
                 cap_state = (m_state, c_state)
@@ -137,7 +140,8 @@ class S2VT_model():
         padding = np.zeros([input_frame.shape[0], self.caption_steps + 1])
         words = self.sess.run([self.predict_result], feed_dict={self.frame: input_frame,
                                                                 self.caption: padding,
-                                                                self.train_state: False})
+                                                                self.train_state: False,
+                                                                self.scheduled_sampling_prob: 0.0})
         return words
     def initialize(self):
         self.sess.run(tf.global_variables_initializer())
@@ -149,7 +153,7 @@ class S2VT_model():
 
 class S2VT_attention_model():
     
-    def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300, schedule_sampling_converge=500):
+    def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300):
         
         self.frame_steps = frame_steps
         self.frame_feat_dim = frame_feat_dim
@@ -159,8 +163,10 @@ class S2VT_attention_model():
     
         ## Graph input
         self.frame = tf.placeholder(tf.float32, [None, frame_steps, frame_feat_dim])    
-        self.caption = tf.placeholder(tf.int32, [None,caption_steps+1])
+        self.caption = tf.placeholder(tf.int64, [None,caption_steps+1])
         self.caption_mask = tf.placeholder(tf.float32, [None, caption_steps+1])
+        self.scheduled_sampling_prob = tf.placeholder(
+            tf.float32, [], name='scheduled_sampling_prob')
         batch_frame = tf.shape(self.frame)[0]
         batch_caption = tf.shape(self.caption)[0]
         tf.Assert(tf.equal(batch_frame, batch_caption), [batch_frame, batch_caption])
@@ -232,8 +238,9 @@ class S2VT_attention_model():
         ## Decoding stage
         ## Training util
         def train_cap(input_lstm,prev_endcoder_output,real_ans,prev_decoder_output,global_step,prev_state):
-           word_index = tf.argmax(prev_decoder_output,axis = 1)
-            
+           word_index = tf.cond(self.scheduled_sampling_prob >= tf.random_uniform([], 0, 1),
+                                lambda: real_ans,
+                                lambda: tf.argmax(prev_decoder_output, axis=1))
            with tf.device('/cpu:0'):
                 word_embed = tf.nn.embedding_lookup(embedding,word_index)
                 output, state = input_lstm(
@@ -249,7 +256,6 @@ class S2VT_attention_model():
                     tf.concat([word_embed, prev_encoder_output], 1), prev_state)
                 m_state, c_state = state
                 return output, m_state, c_state
-        output2 = tf.tile(tf.one_hot([4],vocab_size), [self.batch_size, 1])
         ## Decoding stage
         for i in range(caption_steps):
             
@@ -259,7 +265,13 @@ class S2VT_attention_model():
                         
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(cap_lstm,output1, self.caption[:,i],output2,self.global_step,cap_state), lambda: test_cap(cap_lstm,output1, output2, cap_state))
+                if i == 0:
+                    prev_step_word = tf.tile(tf.one_hot([4], vocab_size), [self.batch_size, 1])
+                else:
+                    prev_step_word = tf.nn.xw_plus_b(
+                        output2, w_word_onehot, b_word_onehot)
+                output2, m_state, c_state = tf.cond(self.train_state, lambda: train_cap(
+                    cap_lstm, output1, self.caption[:, i], prev_step_word, self.global_step, cap_state), lambda: test_cap(cap_lstm, output1, prev_step_word, cap_state))
                 cap_state = (m_state, c_state)
             ## Attention
             #output2 = self.local_attention(output2,enc_lstm_outputs,wp,vp,wa)
@@ -291,18 +303,20 @@ class S2VT_attention_model():
         
         self.sess = tf.Session(config=config)
 
-    def train(self, input_frame, input_caption,input_caption_mask, keep_prob=0.5):
+    def train(self, input_frame, input_caption, input_caption_mask, keep_prob=0.5, scheduled_sampling_prob=0.0):
         _,cost = self.sess.run([self.train_op,self.cost],feed_dict={self.frame:input_frame, 
                                                                     self.caption:input_caption, 
                                                                     self.caption_mask:input_caption_mask,
-                                                                    self.train_state:True})
+                                                                    self.train_state:True,
+                                                                    self.scheduled_sampling_prob:scheduled_sampling_prob})
         return cost
    
     def predict(self, input_frame):
         padding = np.zeros([input_frame.shape[0], self.caption_steps + 1])
         words = self.sess.run([self.predict_result], feed_dict={self.frame: input_frame,
                                                                 self.caption: padding,
-                                                                self.train_state: False})
+                                                                self.train_state: False,
+                                                                self.scheduled_sampling_prob: 0.0})
         return words
     def initialize(self):
         self.sess.run(tf.global_variables_initializer()) 

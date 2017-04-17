@@ -12,6 +12,7 @@ FRAME_DIM = 4096
 BATCH_SIZE = 20
 CAPTION_STEP = 45
 EPOCH = 1000
+SCHEDULED_SAMPLING_CONVERGE = 30000
 
 train_npy_path = 'data/training_data/feat'
 
@@ -39,10 +40,6 @@ def test(model, test_data, dict_rev, global_step, output_path='result/' , train_
 
 def main():
 
-    util.build_word2idx_dict(vocab_size=VOCAB_SIZE,
-                       trainlable_json='data/training_label.json', 
-                       testlabel_json='data/testing_public_label.json',
-                       dict_path='data/dict.json')
 
     print ("building model...")
     S2VT = model.S2VT_attention_model(caption_steps=CAPTION_STEP)
@@ -87,7 +84,8 @@ def main():
         batch_generator = dataLoader.batch_gen(BATCH_SIZE)
         batch_count = 0
         for x, y , y_mask in batch_generator:
-            cost = S2VT.train(x,y,y_mask)
+            cost = S2VT.train(
+                x, y, y_mask, scheduled_sampling_prob=global_step/SCHEDULED_SAMPLING_CONVERGE)
             global_step += 1
             batch_count += 1
             if global_step % 100 == 0:
