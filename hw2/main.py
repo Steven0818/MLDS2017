@@ -91,11 +91,14 @@ def main():
     loader = data.loader()
     print ("training start....")
     for i in range(int(len(data) * EPOCH / BATCH_SIZE)):  
-        time_cost = time.time()
+        
         frames, captions, target_weights = next(loader)
+        start_time = time.time()
         cost = S2VT.train(
             frames, captions, target_weights, scheduled_sampling_prob=i / SCHEDULED_SAMPLING_CONVERGE)
         global_step += 1
+        finish_time = time.time()
+        #print ('each step time cost: {0}'.format(finish_time-start_time))
         if global_step % 100 == 0:
             print('global_step {0} cost: {1}'.format(global_step, cost))
         if global_step % 1000 == 0:

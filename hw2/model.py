@@ -247,7 +247,7 @@ class S2VT_attention_model():
                 output, state = input_lstm(
                     tf.concat([word_embed, prev_endcoder_output], 1), prev_state)
                 m_state, c_state = state
-                return output, m_state, c_state
+           return output, m_state, c_state
         def test_cap(input_lstm,prev_encoder_output, prev_decoder_output, prev_state):
             ##  TODO: beam search
             with tf.device('cpu:0'):
@@ -256,7 +256,7 @@ class S2VT_attention_model():
                 output, state = input_lstm(
                     tf.concat([word_embed, prev_encoder_output], 1), prev_state)
                 m_state, c_state = state
-                return output, m_state, c_state
+            return output, m_state, c_state
         ## Decoding stage
         prev_step_word = tf.tile(tf.one_hot([4], vocab_size), [self.batch_size, 1])
         for i in range(caption_steps):
@@ -369,7 +369,7 @@ class S2VT_attention_model():
 
 class Effective_attention_model():
     
-    def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300, schedule_sampling_converge=500):
+    def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=200, schedule_sampling_converge=500):
         
         self.frame_steps = frame_steps
         self.frame_feat_dim = frame_feat_dim
@@ -462,11 +462,11 @@ class Effective_attention_model():
             
            with tf.device('/cpu:0'):
                 #word_index = tf.argmax(prev_decoder_output,axis = 1)
-                word_embed = tf.nn.embedding_lookup(embedding,real_ans)
+                word_embed = tf.nn.embedding_lookup(embedding,word_index)
                 output, state = input_lstm(
                     tf.concat([word_embed, prev_attention_output], 1), prev_state)
                 m_state, c_state = state
-                return output, m_state, c_state
+           return output, m_state, c_state
         def test_cap(input_lstm, prev_decoder_output, prev_attention_output,prev_state):
             ##  TODO: beam search
             with tf.device('cpu:0'):
@@ -475,7 +475,7 @@ class Effective_attention_model():
                 output, state = input_lstm(
                     tf.concat([word_embed,prev_attention_output], 1), prev_state)
                 m_state, c_state = state
-                return output, m_state, c_state
+            return output, m_state, c_state
         prev_step_word = tf.tile(tf.one_hot([4], vocab_size), [self.batch_size, 1])
         attention_output = tf.zeros(shape = [self.batch_size,dim_hidden])
         ## Decoding stage
@@ -490,7 +490,8 @@ class Effective_attention_model():
                 tf.get_variable_scope().reuse_variables()
                 output2, cap_state = cap_lstm(output1,cap_state)
             ## Attention
-            attention_output = self.local_attention(output2,enc_lstm_outputs,wp,vp,wa)
+            attention_output = self.global_attention(output2,enc_lstm_outputs,wa)
+            #attention_output = self.local_attention(output2,enc_lstm_outputs,wp,vp,wa)
             concat_output = tf.concat([attention_output,output2] , 1)
             attention_output = tf.tanh(tf.matmul(concat_output,wc))  
             prev_step_word = tf.nn.xw_plus_b(attention_output, w_word_onehot, b_word_onehot)
@@ -540,11 +541,17 @@ class Effective_attention_model():
         self.sess.run(tf.global_variables_initializer()) 
 
 
-    def local_attention(self,decode_vec,encode_vecs,wp,vp,wa):
+
+    def global_attention(self,decode_vec,encode_vecs,wa):
+        ## (batch_size,frame_step)
+        score = tf.nn.softmax(self.score(decode_vec,encode_vecs,wa))
+        attention_vec = tf.reduce_sum(encode_vecs*tf.tile(tf.expand_dims(score,2),[1,1,self.dim_hidden]),1  )
         
+        return attention_vec
+    def local_attention(self,decode_vec,encode_vecs,wp,vp,wa):
 
         ## (batch_size,frame_step)
-        score = self.align(decode_vec,encode_vecs,wa)
+        score = self.score(decode_vec,encode_vecs,wa)
         ## (dim_hidden,batch_size)
         decode_vec_t = tf.transpose(decode_vec,[1,0])
         ## (1,batch_size)
@@ -552,7 +559,7 @@ class Effective_attention_model():
         ## (1,batch_size)
         pt = tf.reshape(self.frame_steps*tf.sigmoid(pos_feature),[self.batch_size])
         local_center = tf.round(pt)
-
+        
         half_window = 2 #tf.constant(4,shape = [1])
         delta = half_window/2
         
@@ -570,12 +577,12 @@ class Effective_attention_model():
             return attention_vec
         ## (batch_size,dim_hidden)
         attention_vec = tf.map_fn(index_frame,[encode_vecs,local_center,pt,score],dtype=tf.float32)
-        return attention_vec+decode_vec
+        return attention_vec
                                 
         
     
 
-    def align(self,decode_vec,encode_vecs,wa):
+    def score(self,decode_vec,encode_vecs,wa):
         ## (batch_size,dim_hidden,frame_step)
         encode_vecs_t = tf.transpose(encode_vecs,[0,2,1])
         ## (batch_size,1,dim_hidden)*(batch_size,dim_hidden,frame_step)
