@@ -647,7 +647,7 @@ class Adversary_S2VT_model():
         att_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
         cap_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
         
-        padding = tf.nn.embedding_lookup(embedding,tf.zeros(shape = [self.batch_size]))
+        padding = tf.nn.embedding_lookup(embedding,tf.zeros(shape = [self.batch_size],dtype=tf.int32))
         
         ##################### Computing Graph ########################
         
@@ -753,19 +753,19 @@ class Adversary_S2VT_model():
                     tf.get_variable_scope().reuse_variables()
                 word_index = tf.cond(self.scheduled_sampling_prob >= tf.random_uniform([], 0, 1),
                                 lambda: self.caption[:, i+1],
-                                lambda: tf.argmax(dec_lstm_outputs[i], axis=1))*caption_mask[:,i+1])
+                                lambda: tf.argmax(dec_lstm_outputs[i], axis=1)*tf.cast(self.caption_mask[:,i+1],tf.int64))
                 with tf.device('/cpu:0'):
                     word_embed = tf.nn.embedding_lookup(embedding,word_index)
                     output1, second_att_state = second_att_lstm(word_embed, second_att_state)
             ##input shape of cap_lstm2: [batch_size, 2*dim_hidden]
-            with tf.variable_scope('cap_lstm'):
+            with tf.variable_scope('second_cap_lstm'):
                 if i > 0:
                     tf.get_variable_scope().reuse_variables()
                 output2, cap_state = cap_lstm(tf.concat([padding, output1], 1), second_cap_state)
             second_enc_lstm_outputs.append(output2)
         
         ## second_Decoding stage
-        prev_step_word = second_enc_lstm_outputs[:,-1]
+        prev_step_word = second_enc_lstm_outputs[-1]
         for i in range(self.frame_steps):
             with tf.variable_scope('second_att_lstm'):
                 tf.get_variable_scope().reuse_variables()
@@ -774,17 +774,16 @@ class Adversary_S2VT_model():
             with tf.variable_scope('second_cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
                 output2, second_cap_state = second_cap_lstm(tf.concat([prev_step_word,output1],1),second_cap_state)
-                prev_step_word = tf.nn.xw_plus_b(self.frame[:,i,:],)
-            dec_lstm_outputs.append(prev_step_word)
+                prev_step_word = tf.nn.xw_plus_b(self.frame[:,i,:],w_frame_embed,b_frame_embed)
+            second_dec_lstm_outputs.append(tf.nn.xw_plus_b(output2,w_reframe_embed,b_reframe_embed))
 
-        ## (batch_size,frame_step,dim_hidden)
-        second_enc_lstm_outputs = tf.reshape(tf.concat(second_enc_lstm_outputs , 1),[self.batch_size,self.caption_steps,self.dim_hidden])
-
-
+        second_dec_lstm_outputs = tf.reshape(tf.concat(second_dec_lstm_outputs , 1),[-1,frame_feat_dim])
+        frame_loss = tf.reduce_mean(tf.sqrt(tf.reduce_mean(tf.square(tf.subtract(second_dec_lstm_outputs, frame_flat)),-1)))
 
 
 
-        self.cost = tf.reduce_mean(caption_loss)
+        ratio = 0.7
+        self.cost = ratio*tf.reduce_mean(caption_loss)+(1-ratio)*frame_loss
         #self.global_step = tf.Variable(0, trainable=False)
         self.train_op = tf.train.AdamOptimizer(learning_rate = 0.001).minimize(self.cost, global_step=self.global_step)
         
@@ -794,7 +793,7 @@ class Adversary_S2VT_model():
         
         self.sess = tf.Session(config=config)
 
-    def train(self, input_frame, input_caption, input_caption_mask, keep_prob=0.5, scheduled_sampling_prob=0.0):
+     def train(self, input_frame, input_caption, input_caption_mask, keep_prob=0.5, scheduled_sampling_prob=0.0):
         _,cost = self.sess.run([self.train_op,self.cost],feed_dict={self.frame:input_frame, 
                                                                     self.caption:input_caption, 
                                                                     self.caption_mask:input_caption_mask,
@@ -803,7 +802,7 @@ class Adversary_S2VT_model():
                                                                     self.keep_prob:keep_prob})
         return cost
    
-    def predict(self, input_frame):
+     def predict(self, input_frame):
         padding = np.zeros([input_frame.shape[0], self.caption_steps + 1])
         words = self.sess.run([self.predict_result], feed_dict={self.frame: input_frame,
                                                                 self.caption: padding,
@@ -811,5 +810,5 @@ class Adversary_S2VT_model():
                                                                 self.scheduled_sampling_prob: 1.0,
                                                                 self.keep_prob: 1.0})
         return words
-    def initialize(self):
+     def initialize(self):
         self.sess.run(tf.global_variables_initializer()) 
