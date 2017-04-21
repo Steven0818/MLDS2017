@@ -57,7 +57,7 @@ class DataLoader():
                     y_mask = np.delete(y_mask, range(j, batch_size), axis=0)
                     break
                 x, y = vec
-                x = np.asarray([x[k*4,:]for k in range(self.frame_step)])
+                x = np.asarray([x[k*2,:]for k in range(self.frame_step)])
                 x_batch[j, ...] = x
                 y_batch[j,:len(y)] = y
                 y_mask[j, :len(y)] = 1
@@ -92,7 +92,7 @@ class TestDataLoader():
                 filename = self.video_names[i + j]
                 filepath = os.path.join(self.data_path, filename + '.npy')
                 x = np.load(filepath) 
-                x = np.asarray([x[k*4,:]for k in range(self.frame_step)])
+                x = np.asarray([x[k*2,:]for k in range(self.frame_step)])
                 x_batch[j, ...] = x
             ret.append((x_batch, self.video_names[i:end], self.captions[i:end]))
         return ret
