@@ -14,7 +14,8 @@ VOCAB_COUNT = 3000
 
 PAD_ID = 0
 UNK_ID = 1
-BOS_ID = 2
+BOS_ID = 4
+EOS_ID = 3
 
 
 """
@@ -93,6 +94,31 @@ def get_tr_in_idx(trainlable_json='data/training_label.json', dict_path='data/di
         new_json_obj.append(new_datum)
     
     return new_json_obj   
+
+
+def trim(sen):
+    if EOS_ID in sen:
+        return sen[:sen.index(EOS_ID)]
+    else:
+        return sen
+
+
+def test(model, test_data, dict_rev, global_step, output_path='result/', train_test='test'):
+    answers = []
+    score = 0
+    for x, video_ids, captions in test_data:
+        result = model.predict(x)
+        ## remove eos
+        sentences = [' '.join([dict_rev[str(word)]
+                               for word in trim(sen.tolist())]) for sen in result[0]]
+        answers.extend(list(zip(video_ids, sentences)))
+        for index, answer in enumerate(sentences):
+            score += np.mean(np.array([eval.BLEU(answer, cap)
+                                       for cap in captions[index]]))
+    print('{0} BLEU score of step {1}: {2}'.format(
+        train_test, global_step, score / len(answers)))
+    json.dump([{'caption': cap, 'id:': vid} for vid, cap in answers],
+              open(output_path + train_test + '_result_' + str(global_step) + '.json', 'w'))
 
 
 class Data:
