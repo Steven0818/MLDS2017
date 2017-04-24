@@ -2,6 +2,8 @@ import sys
 import json
 import numpy as np
 import model
+import bs_model
+
 import util
 import input
 import eval
@@ -16,11 +18,37 @@ BATCH_SIZE = 100
 CAPTION_STEP = 45
 EPOCH = 1000
 SCHEDULED_SAMPLING_CONVERGE = 5000
-BEAM_SIZE = 3
+BEAM_SIZE = 4
+
+FLAGS = tf.app.flags.FLAGS
+
+tf.app.flags.DEFINE_string('log_root', './model', 'Directory for model root.')
+tf.app.flags.DEFINE_string('train_dir', './train', 'Directory for train.')
+tf.app.flags.DEFINE_string('decode_dir', '', 'Directory for decode summaries.')
+tf.app.flags.DEFINE_string('mode', 'train', 'train/eval/decode mode')
+tf.app.flags.DEFINE_integer('max_run_steps', 10000000,
+                            'Maximum number of run steps.')
+tf.app.flags.DEFINE_integer('beam_size', 4,
+                            'beam size for beam search decoding.')
+tf.app.flags.DEFINE_integer('checkpoint_secs', 300, 'How often to checkpoint.')
+tf.app.flags.DEFINE_integer('random_seed', 111, 'A seed value for randomness.')
 
 
 train_npy_path = 'data/training_data/feat'
 
+
+def _RunningAvgLoss(loss, running_avg_loss, summary_writer, step, decay=0.999):
+    """Calculate the running average of losses."""
+    if running_avg_loss == 0:
+        running_avg_loss = loss
+    else:
+        running_avg_loss = running_avg_loss * decay + (1 - decay) * loss
+    running_avg_loss = min(running_avg_loss, 12)
+    loss_sum = tf.Summary()
+    loss_sum.value.add(tag='running_avg_loss', simple_value=running_avg_loss)
+    summary_writer.add_summary(loss_sum, step)
+    sys.stdout.write('running_avg_loss: %f\n' % running_avg_loss)
+    return running_avg_loss
 
 def Train(model, data_batcher):
     """Runs model training."""
@@ -41,15 +69,13 @@ def Train(model, data_batcher):
     running_avg_loss = 0
     step = 0
     while not sv.should_stop() and step < FLAGS.max_run_steps:
-    (article_batch, abstract_batch, targets, article_lens, abstract_lens,
-    loss_weights, _, _) = data_batcher.NextBatch()
-    (_, summaries, loss, train_step) = model.run_train_step(
-        sess, article_batch, abstract_batch, targets, article_lens,
-        abstract_lens, loss_weights)
+        frames, captions, loss_weights = next(data_batcher)
+        (_, summaries, loss, train_step) = model.run_train_step(
+            sess, frames, captions, loss_weights)
 
-    summary_writer.add_summary(summaries, train_step)
-    running_avg_loss = _RunningAvgLoss(
-        running_avg_loss, loss, summary_writer, train_step)
+        summary_writer.add_summary(summaries, train_step)
+        running_avg_loss = _RunningAvgLoss(
+            running_avg_loss, loss, summary_writer, train_step)
     step += 1
     if step % 100 == 0:
         summary_writer.flush()
@@ -61,23 +87,16 @@ def main():
 
 
     print ("building model...")
-    S2VT = model.Effective_attention_model(caption_steps=CAPTION_STEP)
-    S2VT.initialize()
+    # S2VT = model.Effective_attention_model(caption_steps=CAPTION_STEP)
+    # S2VT.initialize()
     print ("building model successfully...")
-    bm = BeamSearch(S2VT, BEAM_SIZE, util.BOS_ID, util.EOS_ID, CAPTION_STEP)
+    # bm = BeamSearch(S2VT, BEAM_SIZE, util.BOS_ID, util.EOS_ID, CAPTION_STEP)
     
     d_word2idx = json.load(open('data/dict.json', 'r'))
     d_idx2word = json.load(open('data/dict_rev.json', 'r'))
     tr_in_idx = util.get_tr_in_idx(trainlable_json='data/training_label.json', dict_path='data/dict.json')
     test_label = json.load(open('data/testing_public_label.json'))
 
-    # dataLoader = input.DataLoader(tr_in_idx,
-    #                               data_path='data/training_data/feat',
-    #                               frame_step=FRAME_STEP,
-    #                               frame_dim=FRAME_DIM,
-    #                               caption_step=CAPTION_STEP,
-    #                               vocab_size=VOCAB_SIZE
-    #                              )
     data = util.Data(
         'data/training_data/feat',
         json.load(open('data/training_label.json')),
@@ -108,6 +127,9 @@ def main():
     epoch_size = len(data)
     loader = data.loader()
     print ("training start....")
+    model = bs_model.Beamsearch_attention_model()
+    Train(model, loader)
+    """
     for i in range(int(len(data) * EPOCH / BATCH_SIZE)):  
         
         frames, captions, target_weights = next(loader)
@@ -126,6 +148,7 @@ def main():
         if i * BATCH_SIZE > epoch_count * epoch_size:
             print('Epoch {0} end'.format(epoch_count))
             epoch_count += 1
+    """
 
 
 if __name__ == '__main__':
