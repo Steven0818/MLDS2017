@@ -69,13 +69,12 @@ class BeamSearch(object):
     self._end_token = end_token
     self._max_steps = max_steps
 
-  def BeamSearch(self, sess, enc_inputs, enc_seqlen):
+  def BeamSearch(self, sess, enc_inputs):
     """Performs beam search for decoding.
 
     Args:
       sess: tf.Session, session
       enc_inputs: ndarray of shape (enc_length, 1), the document ids to encode
-      enc_seqlen: ndarray of shape (1), the length of the sequnce
 
     Returns:
       hyps: list of Hypothesis, the best hypotheses found by beam search,
@@ -84,7 +83,7 @@ class BeamSearch(object):
 
     # Run the encoder and extract the outputs and final state.
     enc_top_states, dec_in_state = self._model.encode_top_state(
-        sess, enc_inputs, enc_seqlen)
+        sess, [enc_inputs] * self._beam_size)
     # Replicate the initial states K times for the first step.
     hyps = [Hypothesis([self._start_token], 0.0, dec_in_state)
             ] * self._beam_size

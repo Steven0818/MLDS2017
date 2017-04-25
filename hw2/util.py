@@ -7,6 +7,7 @@ import random
 from collections import Counter
 from tqdm import tqdm
 import logging
+import eval
 import multiprocessing as mp
 
 replace_char =  r'[\"\'_:\+\-,()\[\]<>\\]'
