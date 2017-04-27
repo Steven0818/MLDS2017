@@ -25,13 +25,12 @@ def extract_argmax_and_embed_with_scheduled(embedding, ground_truth, output_proj
     def loop_function(prev, i):
         """function that feed previous model output rather than ground truth with a scheduled_sampling_prob."""
         prev_symbol = tf.cond(scheduled_prob >= tf.random_uniform([], 0, 1, dtype=tf.float64),
-                            lambda: ground_truth[min(i+1, len(ground_truth)-1)],
+                            lambda: ground_truth[min(i , len(ground_truth) - 1)],
                             lambda: tf.argmax(tf.nn.xw_plus_b(prev, output_projection[0], output_projection[1]), 1))
+        print(len(ground_truth),ground_truth[0].get_shape())
         # Note that gradients will not propagate through the second parameter of
         # embedding_lookup.
         emb_prev = tf.nn.embedding_lookup(embedding, prev_symbol)
-        if not update_embedding:
-            emb_prev = tf.stop_gradient(emb_prev)
         return emb_prev
     return loop_function
 
@@ -41,7 +40,7 @@ class Beamsearch_attention_model():
                  frame_feat_dim=4096,
                  caption_steps=45,
                  vocab_size=3000,
-                 dim_hidden=200,
+                 dim_hidden=300,
                  schedule_sampling_converge=500,
                  batch_size=100,
                  enc_layers=4,
@@ -71,6 +70,7 @@ class Beamsearch_attention_model():
         self.loss_weights = tf.placeholder(
             tf.float32, [self.batch_size, self.caption_steps+1])
 
+        self.scheduled_sampling_prob = tf.placeholder(tf.float64)
         self.keep_prob = tf.placeholder(tf.float32, name='dropout_prob')
 
     def add_seq2seq(self):
@@ -78,9 +78,9 @@ class Beamsearch_attention_model():
             # list of [batch_size, frame_feat_dim]
             encoder_inputs = tf.unstack(self.frames, axis=1)
             decoder_inputs = tf.unstack(self.captions, axis=1)
-            targets = [x for x in decoder_inputs]
+            targets = [x for x in decoder_inputs][1:]
             
-            loss_weights = tf.unstack(self.loss_weights, axis=1)
+            loss_weights = tf.unstack(self.loss_weights, axis=1)[1:]
 
             seq_len = tf.fill([self.batch_size], self.frame_steps)
 
@@ -120,14 +120,28 @@ class Beamsearch_attention_model():
                     'v', [self.vocab_size], dtype=tf.float32,
                     initializer=tf.truncated_normal_initializer(stddev=1e-4))
 
-            self.scheduled_sampling_prob = tf.minimum(self.global_step / self.scheduled_sampling_decay, 1.0)
-
+            if self.mode == 'decode':
+                self.scheduled_sampling_prob = 1.0
             with tf.variable_scope('decoder'):
                 # When decoding, use model output from the previous step
                 # for the next step.
-                loop_function = extract_argmax_and_embed_with_scheduled(
-                    embedding, targets, (w, v), update_embedding=True, scheduled_prob=self.scheduled_sampling_prob)
-
+                # loop_function = extract_argmax_and_embed_with_scheduled(
+                #     embedding, targets, (w, v), update_embedding=True, scheduled_prob=self.scheduled_sampling_prob)
+                
+                def loop_function(prev, i):
+                    """function that feed previous model output rather than ground truth with a scheduled_sampling_prob."""
+                    prev_symbol = tf.cond(self.scheduled_sampling_prob >= tf.random_uniform([], 0, 1, dtype=tf.float64),
+                                        lambda: tf.argmax(tf.nn.xw_plus_b(
+                                            prev, w, v), 1),
+                                        lambda: targets[min(i, len(targets) - 1)])
+                    # Note that gradients will not propagate through the second parameter of
+                    # embedding_lookup.
+                    emb_prev = tf.nn.embedding_lookup(embedding, prev_symbol)
+                    return emb_prev
+                
+                if self.mode == 'decode':
+                    loop_function = None
+                    emb_decoder_inputs = [emb_decoder_inputs[0]]
                 cell = tf.contrib.rnn.LSTMCell(
                     self.dim_hidden,
                     initializer=tf.random_uniform_initializer(-0.1, 0.1, seed=113),
@@ -143,7 +157,7 @@ class Beamsearch_attention_model():
                 initial_state_attention = (self.mode == 'decode')
                 decoder_outputs, self._dec_out_state = tf.contrib.legacy_seq2seq.attention_decoder(
                     emb_decoder_inputs, self._dec_in_state, self._enc_top_states,
-                    cell, num_heads=1, loop_function=loop_function,
+                    cell_fw, num_heads=1, loop_function=loop_function,
                     initial_state_attention=initial_state_attention)
 
                 with tf.variable_scope('output'):
@@ -153,6 +167,8 @@ class Beamsearch_attention_model():
                             tf.get_variable_scope().reuse_variables()
                         model_outputs.append(
                             tf.nn.xw_plus_b(decoder_outputs[i], w, v))
+                
+                self.predict_result = tf.stack([tf.argmax(x[:,2:], 1) + 2 for x in model_outputs], axis=1)
 
                 if self.mode == 'decode':
                     with tf.variable_scope('decode_output'), tf.device('/cpu:0'):
@@ -162,23 +178,18 @@ class Beamsearch_attention_model():
                             axis=1, values=[tf.reshape(x, [self.batch_size, 1]) for x in best_outputs])
 
                         self._topk_log_probs, self._topk_ids = tf.nn.top_k(
-                            tf.log(tf.nn.softmax(model_outputs[-1])), self.batch_size * 2)
-
-
-                with tf.variable_scope('loss'):
-                    def sampled_loss_func(inputs, labels):
-                        # with tf.device('/cpu:0'):  # Try gpu.
-                        labels = tf.reshape(labels, [-1, 1])
-                        return tf.nn.sampled_softmax_loss(
-                            weights=w_t, biases=v, labels=labels, inputs=inputs,
-                            num_sampled=self.num_softmax_samples, num_classes=self.vocab_size)
+                            tf.log(tf.nn.softmax(model_outputs[0])[:,2:]), self.batch_size * 2)
+                        self._topk_ids = self._topk_ids + 2
 
                 if self.num_softmax_samples != 0 and self.mode == 'train':
-                    self.loss = seq2seq_lib.sampled_sequence_loss(
-                        decoder_outputs, targets, loss_weights, sampled_loss_func)
+                    self.loss = tf.contrib.legacy_seq2seq.sequence_loss_by_example(model_outputs[:self.caption_steps],
+                                                                       targets,
+                                                                       loss_weights)
+                    self.loss = tf.reduce_mean(self.loss)
+                # for eval
                 else:
                     self.loss = tf.contrib.legacy_seq2seq.sequence_loss(
-                        model_outputs, targets, loss_weights)
+                        model_outputs[:self.caption_steps], targets, loss_weights)
                 tf.summary.scalar('loss', tf.minimum(12.0, self.loss))
 
     def add_train_op(self):
@@ -186,7 +197,7 @@ class Beamsearch_attention_model():
 
         self.lr_rate = tf.maximum(
             self.min_lr,  # min_lr_rate.
-            tf.train.exponential_decay(self.lr, self.global_step, 30000, 0.98))
+            tf.train.exponential_decay(self.lr, self.global_step, 1000, 0.96))
 
         tvars = tf.trainable_variables()
         grads, global_norm = tf.clip_by_global_norm(
@@ -218,7 +229,7 @@ class Beamsearch_attention_model():
             self._dec_in_state:
                 np.squeeze(np.array(dec_init_states)),
             self.captions:
-                np.transpose(np.array([latest_tokens]))}
+                np.transpose(np.array([latest_tokens]*2))}
 
         results = sess.run(
             [self._topk_ids, self._topk_log_probs, self._dec_out_state],
@@ -236,8 +247,16 @@ class Beamsearch_attention_model():
             self.add_train_op()
         self.summaries = tf.summary.merge_all()
 
-    def run_train_step(self, sess, frames, captions, loss_weights):
+    def run_train_step(self, sess, frames, captions, loss_weights, scheduled_sampling_prob):
         to_return = [self.train_op, self.summaries, self.loss, self.global_step]
         return sess.run(to_return, feed_dict={self.frames: frames,
                                               self.captions: captions,
-                                              self.loss_weights: loss_weights})
+                                              self.loss_weights: loss_weights,
+                                              self.scheduled_sampling_prob: scheduled_sampling_prob})
+
+    def test_result(self, sess, frames, captions):
+        return sess.run([self.predict_result], feed_dict={self.frames: frames,
+                                              self.captions: captions,
+                                              self.scheduled_sampling_prob: 1.0})[0]
+    def get_global_step(self, sess):
+        return sess.run([self.global_step])[0]
