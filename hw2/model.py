@@ -368,7 +368,6 @@ class S2VT_attention_model():
         return score
 
 class Effective_attention_model():
-  
     def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=200, schedule_sampling_converge=500):
         
         self.frame_steps = frame_steps
@@ -378,17 +377,15 @@ class Effective_attention_model():
         self.dim_hidden = dim_hidden
     
         ## Graph input
-        self.frame = tf.placeholder(tf.float32, [None, frame_steps, frame_feat_dim])
+        self.frame = tf.placeholder(tf.float32, [None, frame_steps, frame_feat_dim], name='frame_input')
         self.caption = tf.placeholder(tf.int64, [None,caption_steps+1])
         self.caption_mask = tf.placeholder(tf.float32, [None, caption_steps+1])
-        batch_frame = tf.shape(self.frame)[0]
         # batch_caption = tf.shape(self.caption)[0]
         # tf.Assert(tf.equal(batch_frame, batch_caption), [batch_frame, batch_caption])
-        self.batch_size = batch_frame
-        self.train_state = tf.placeholder(tf.bool)
+        self.batch_size = tf.shape(self.frame)[0]
         self.scheduled_sampling_prob = tf.placeholder(
                 tf.float32, [], name='scheduled_sampling_prob')
-        self.keep_prob = tf.placeholder(tf.float32)
+        self.keep_prob = tf.placeholder(tf.float32, name='dropout_prob')
 
         self.global_step = tf.Variable(0, trainable=False)
         ## frame Embedding param
@@ -417,14 +414,15 @@ class Effective_attention_model():
 
         ## two lstm param
         with tf.variable_scope("att_lstm"):
-            att_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
+            att_lstm = tf.contrib.rnn.LSTMCell(dim_hidden, state_is_tuple=False)
             att_lstm = tf.contrib.rnn.DropoutWrapper(att_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)
         with tf.variable_scope("cap_lstm"):
-            cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)        
+            cap_lstm = tf.contrib.rnn.LSTMCell(
+                dim_hidden, state_is_tuple=False)
             cap_lstm = tf.contrib.rnn.DropoutWrapper(cap_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)                
         
-        self.att_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
-        self.cap_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
+        self.att_state = (tf.zeros([self.batch_size, 2*dim_hidden]))
+        self.cap_state = (tf.zeros([self.batch_size, 2*dim_hidden]))
 
         padding = tf.zeros([self.batch_size, dim_hidden])
         
@@ -464,41 +462,48 @@ class Effective_attention_model():
                 word_embed = tf.nn.embedding_lookup(embedding,word_index)
            return input_lstm(
                     tf.concat([word_embed, prev_attention_output], 1), prev_state)
-        def test_cap(input_lstm, prev_decoder_output, prev_attention_output,prev_state):
+        def test_cap(input_lstm, prev_word, prev_attention_output,prev_state):
             ##  TODO: beam search
             with tf.device('cpu:0'):
-                word_index = tf.argmax(prev_decoder_output, axis=1)
-                word_embed = tf.nn.embedding_lookup(embedding, word_index)
+                word_embed = tf.nn.embedding_lookup(embedding, prev_word)
                 return input_lstm(
                     tf.concat([word_embed,prev_attention_output], 1), prev_state)
 
 
         ### Beam search
-        self.decoder_output = tf.tile(tf.one_hot([4], vocab_size), [self.batch_size, 1])
+        ## decoder state param
         self.attention_output = tf.zeros(shape=[self.batch_size, dim_hidden])
         self.dec_in_state = (self.att_state, self.cap_state, self.attention_output)
+        
+        self.decoder_output = tf.tile(tf.one_hot([4], vocab_size), [self.batch_size, 1])
+        
+        self.prev_word = tf.placeholder(tf.int64, [None])
+        self.beam_size = tf.shape(self.prev_word)[0]
+
+        self.att_state_bs = tf.placeholder(tf.float32, [None, dim_hidden])
+        self.cap_state_bs = tf.placeholder(tf.float32, [None, dim_hidden])
+        self.attention_output_bs = tf.placeholder(tf.float32, [None, dim_hidden])
         def test_beam_search():
             with tf.variable_scope('att_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                output1, self.att_state = test_cap(
-                    att_lstm, self.decoder_output, self.attention_output, self.att_state)
+                output1, self.att_state_bs = test_cap(
+                    att_lstm, self.prev_word, self.attention_output_bs, self.att_state_bs)
 
             with tf.variable_scope('cap_lstm'):
                 tf.get_variable_scope().reuse_variables()
-                output2, self.cap_state = cap_lstm(output1, self.cap_state)
+                output2, self.cap_state_bs = cap_lstm(output1, self.cap_state_bs)
             ## Attention
             attention_output = self.global_attention(output2, self.enc_lstm_outputs, wa)
             # attention_output = self.local_attention(output2,enc_lstm_outputs,wp,vp,wa)
             concat_output = tf.concat([attention_output, output2], 1)
             dec_log_output = tf.nn.top_k(tf.log(tf.nn.softmax(tf.nn.xw_plus_b(
-                attention_output, self.w_word_onehot, self.b_word_onehot), dim=-1)), k=self.batch_size*2)
+                attention_output, self.w_word_onehot, self.b_word_onehot), dim=-1)), k=self.beam_size*2)
             attention_state_output = tf.tanh(tf.matmul(concat_output, wc))
-            return dec_log_output, (self.att_state, self.cap_state, attention_state_output)
+            return dec_log_output, (self.att_state_bs, self.cap_state_bs, attention_state_output)
         
-        (self.topk_log_probs, self.tokk_ids), self.new_state = test_beam_search()
+        (self.topk_log_probs, self.topk_ids), self.new_state = test_beam_search()
 
         ###
-
         def decode_one_step(prev_output, prev_attention):
             with tf.variable_scope('att_lstm'):
                 tf.get_variable_scope().reuse_variables()
@@ -547,7 +552,6 @@ class Effective_attention_model():
         _,cost = self.sess.run([self.train_op,self.cost],feed_dict={self.frame:input_frame, 
                                                                     self.caption:input_caption, 
                                                                     self.caption_mask:input_caption_mask,
-                                                                    self.train_state:True,
                                                                     self.scheduled_sampling_prob:scheduled_sampling_prob,
                                                                     self.keep_prob:keep_prob})
         return cost
@@ -556,7 +560,6 @@ class Effective_attention_model():
         padding = np.zeros([input_frame.shape[0], self.caption_steps + 1])
         words = self.sess.run([self.predict_result], feed_dict={self.frame: input_frame,
                                                                 self.caption: padding,
-                                                                self.train_state: False,
                                                                 self.scheduled_sampling_prob:1.0,
                                                                 self.keep_prob:1.0})
         return words
@@ -564,18 +567,29 @@ class Effective_attention_model():
         self.sess.run(tf.global_variables_initializer())
 
     def encode_output(self, input_frame):
-        encode_output, dec_in_state = self.sess.run([self.enc_lstm_outputs, self.dec_in_state], feed_dict={
+        encode_output, dec_in_state, batch_size = self.sess.run([self.enc_lstm_outputs, self.dec_in_state, self.batch_size], feed_dict={
                                                     self.frame: input_frame, self.keep_prob: 1.0})
+        prev_att_state, prev_cap_state, prev_attention = dec_in_state
+        # att_c_state, att_h_state = prev_att_state
+        # cap_c_state, cap_h_state = prev_cap_state
+        # print(tf.shape(att_c_state), tf.shape(att_h_state))
+        # print(tf.shape(cap_c_state), tf.shape(cap_h_state))
         return encode_output, dec_in_state
 
-    def docode_top_k(self, enc_lstm_outputs, prev_word, prev_state):
+    def decode_top_k(self, enc_lstm_outputs, prev_word, prev_state):
         prev_att_state, prev_cap_state, prev_attention = prev_state
-        return self.sess.run([self.word_output_bs, self.new_state], feed_dict={
-            self.enc_lstm_outputs: enc_lstm_outputs,
-            self.decoder_output: prev_word,
-            self.attention_output: prev_attention,
-            self.att_state:prev_att_state,
-            self.cap_state:prev_cap_state,
+        padding = np.zeros([len(prev_word), self.frame_steps, self.frame_feat_dim])
+        print(np.array(enc_lstm_outputs).shape)
+        print(np.repeat(np.array(enc_lstm_outputs), len(prev_word), axis=0).shape)
+        return self.sess.run([self.topk_ids, self.topk_log_probs, self.new_state], feed_dict={
+            # self.frame: padding,
+            self.enc_lstm_outputs: np.repeat(np.array(enc_lstm_outputs), len(prev_word), axis=0),
+            self.prev_word: prev_word,
+            self.attention_output_bs: np.squeeze(np.array(prev_attention)),
+            self.att_state_bs: np.squeeze(np.array(prev_att_state)),
+            self.cap_state_bs: np.squeeze(np.array(prev_cap_state)),
+            # self.batch_size: len(prev_word),
+            self.keep_prob:1.0
         })
 
     def global_attention(self,decode_vec,encode_vecs,wa):

@@ -8,7 +8,7 @@ import util
 import input
 import eval
 import time
-from beam_search import BeamSearch
+import decode
 import tensorflow as tf
 
 VOCAB_SIZE = 3000
@@ -17,14 +17,14 @@ FRAME_DIM = 4096
 BATCH_SIZE = 100
 CAPTION_STEP = 45
 EPOCH = 1000
-SCHEDULED_SAMPLING_CONVERGE = 5000
+SCHEDULED_SAMPLING_CONVERGE = 10000
 BEAM_SIZE = 4
 
 FLAGS = tf.app.flags.FLAGS
 
 tf.app.flags.DEFINE_string('log_root', './model', 'Directory for model root.')
 tf.app.flags.DEFINE_string('train_dir', './train', 'Directory for train.')
-tf.app.flags.DEFINE_string('decode_dir', '', 'Directory for decode summaries.')
+tf.app.flags.DEFINE_string('decode_dir', './result', 'Directory for decode summaries.')
 tf.app.flags.DEFINE_string('mode', 'train', 'train/eval/decode mode')
 tf.app.flags.DEFINE_integer('max_run_steps', 10000000,
                             'Maximum number of run steps.')
@@ -47,10 +47,10 @@ def _RunningAvgLoss(loss, running_avg_loss, summary_writer, step, decay=0.999):
     loss_sum = tf.Summary()
     loss_sum.value.add(tag='running_avg_loss', simple_value=running_avg_loss)
     summary_writer.add_summary(loss_sum, step)
-    sys.stdout.write('running_avg_loss: %f\n' % running_avg_loss)
+    print('running_avg_loss step{0}: {1}'.format(step, running_avg_loss))
     return running_avg_loss
 
-def Train(model, data_batcher):
+def Train(model, data_batcher, dict_rev):
     """Runs model training."""
     model.build_graph()
     saver = tf.train.Saver()
@@ -71,17 +71,22 @@ def Train(model, data_batcher):
     while not sv.should_stop() and step < FLAGS.max_run_steps:
         frames, captions, loss_weights = next(data_batcher)
         (_, summaries, loss, train_step) = model.run_train_step(
-            sess, frames, captions, loss_weights)
+            sess, frames, captions, loss_weights, 1.0)
 
         summary_writer.add_summary(summaries, train_step)
         running_avg_loss = _RunningAvgLoss(
             running_avg_loss, loss, summary_writer, train_step)
-    step += 1
-    if step % 100 == 0:
-        summary_writer.flush()
+        if step % 100 == 0:
+            train_result = model.test_result(sess, frames, captions)
+            # print(len(train_result[0]))
+            print(' '.join([dict_rev[str(x)] for x in train_result[0]]))
+            # print(' '.join([dict_rev[str(x)] for x in captions[0]]))
+        step += 1
+        if step % 100 == 0:
+            summary_writer.flush()
     sv.Stop()
     return running_avg_loss
-
+    
 
 def main():
 
@@ -119,7 +124,8 @@ def main():
                                                   caption_step=CAPTION_STEP,
                                                   vocab_size=VOCAB_SIZE,
                                                   shuffle=False)
-    test_batch = test_data_loader.get_data(BATCH_SIZE)
+    # test_batch = test_data_loader.get_data(BATCH_SIZE)
+    test_data = test_data_loader.get_all_data()
     train_test_batch = train_test_data_loader.get_data(BATCH_SIZE)
 
     global_step = 0
@@ -127,8 +133,15 @@ def main():
     epoch_size = len(data)
     loader = data.loader()
     print ("training start....")
-    model = bs_model.Beamsearch_attention_model()
-    Train(model, loader)
+    # model = bs_model.Beamsearch_attention_model()
+    # Train(model, loader, d_idx2word)
+    print("testing start....")
+    model = bs_model.Beamsearch_attention_model(caption_steps=1, batch_size=BEAM_SIZE, mode='decode')
+    
+    decoder = decode.BSDecoder(
+        model, test_data, beam_size=BEAM_SIZE, dict_rev=d_idx2word)
+    decoder.DecodeLoop()
+    # decoder.test_model()
     """
     for i in range(int(len(data) * EPOCH / BATCH_SIZE)):  
         
