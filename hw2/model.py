@@ -429,10 +429,10 @@ class Effective_attention_model():
         ## two lstm param
         with tf.variable_scope("att_lstm"):
             att_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
-            att_lstm = tf.contrib.rnn.DropoutWrapper(att_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)
+            #att_lstm = tf.contrib.rnn.DropoutWrapper(att_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)
         with tf.variable_scope("cap_lstm"):
             cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)        
-            cap_lstm = tf.contrib.rnn.DropoutWrapper(cap_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)                
+            #cap_lstm = tf.contrib.rnn.DropoutWrapper(cap_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)                
         
         att_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
         cap_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
