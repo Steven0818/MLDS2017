@@ -5,7 +5,7 @@ import json
 import re
 import random
 from collections import Counter
-from tqdm import tqdm
+# from tqdm import tqdm
 import logging
 import multiprocessing as mp
 
@@ -95,86 +95,86 @@ def get_tr_in_idx(trainlable_json='data/training_label.json', dict_path='data/di
     return new_json_obj   
 
 
-class Data:
-    def __init__(self, feat_dir, training_json, word2idx, idx2word, batch_size, shuffle=True):
-        self.feat_dir = feat_dir
-        self.training_json = training_json
-        self.word2idx = word2idx
-        self.idx2word = idx2word
-        self.data = []
-        self.workers = []
-        self.batch_size = batch_size
+# class Data:
+#     def __init__(self, feat_dir, training_json, word2idx, idx2word, batch_size, shuffle=True):
+#         self.feat_dir = feat_dir
+#         self.training_json = training_json
+#         self.word2idx = word2idx
+#         self.idx2word = idx2word
+#         self.data = []
+#         self.workers = []
+#         self.batch_size = batch_size
 
-        for t in tqdm(training_json):
-            _id, _captions = self.get_one_caption_list(t)
+#         for t in tqdm(training_json):
+#             _id, _captions = self.get_one_caption_list(t)
 
-            _feat = self.get_feat(_id)
-            if _feat is None:
-                continue
+#             _feat = self.get_feat(_id)
+#             if _feat is None:
+#                 continue
 
-            self.data.extend([(_feat, c) for c in _captions])
+#             self.data.extend([(_feat, c) for c in _captions])
 
-        if shuffle:
-            random.shuffle(self.data)
+#         if shuffle:
+#             random.shuffle(self.data)
 
-    def get_one_caption_list(self, datum):
-        _id = datum['id']
-        _captions = []
+#     def get_one_caption_list(self, datum):
+#         _id = datum['id']
+#         _captions = []
 
-        for sentence in datum['caption']:
-            sentence = re.sub(replace_char, ' ',
-                              sentence).replace(".", " <eos>")
-            words = [w.lower() for w in sentence.split()]
+#         for sentence in datum['caption']:
+#             sentence = re.sub(replace_char, ' ',
+#                               sentence).replace(".", " <eos>")
+#             words = [w.lower() for w in sentence.split()]
 
-            if words[-1] != '<eos>':
-                words.append('<eos>')
+#             if words[-1] != '<eos>':
+#                 words.append('<eos>')
 
-            _captions.append(
-                [self.word2idx[w] if w in self.word2idx else UNK_ID for w in words])
-            _captions[-1].insert(0, BOS_ID)
-        return _id, _captions
+#             _captions.append(
+#                 [self.word2idx[w] if w in self.word2idx else UNK_ID for w in words])
+#             _captions[-1].insert(0, BOS_ID)
+#         return _id, _captions
 
-    def get_feat(self, cid):
-        _cid = '{0}.npy'.format(cid)
-        if _cid in os.listdir(self.feat_dir):
-            return np.load(os.path.join(self.feat_dir, _cid))
+#     def get_feat(self, cid):
+#         _cid = '{0}.npy'.format(cid)
+#         if _cid in os.listdir(self.feat_dir):
+#             return np.load(os.path.join(self.feat_dir, _cid))
 
-        return None
+#         return None
 
-    def loader(self):
-        def put_batch(data, b, q):
-            while True:
-                candidates = random.sample(data, k=b)
-                q.put(Data.get_batch(candidates))
+#     def loader(self):
+#         def put_batch(data, b, q):
+#             while True:
+#                 candidates = random.sample(data, k=b)
+#                 q.put(Data.get_batch(candidates))
 
-        q = mp.Queue(maxsize=200)
+#         q = mp.Queue(maxsize=200)
 
-        for i in range(5):
-            p = mp.Process(name='worker{0}'.format(i),
-                           target=put_batch,
-                           args=(self.data, self.batch_size, q))
-            p.daemon = True
-            p.start()
-            self.workers.append(p)
+#         for i in range(5):
+#             p = mp.Process(name='worker{0}'.format(i),
+#                            target=put_batch,
+#                            args=(self.data, self.batch_size, q))
+#             p.daemon = True
+#             p.start()
+#             self.workers.append(p)
 
-        while True:
-            yield q.get()
+#         while True:
+#             yield q.get()
 
-    @staticmethod
-    def get_batch(data):
-        batch_size = len(data)
-        frames = [np.zeros((20, 4096)) for _ in range(batch_size)]
-        captions = [[0] * 46 for _ in range(batch_size)]
-        target_weights = [[0.0] * 46 for _ in range(batch_size)]
+#     @staticmethod
+#     def get_batch(data):
+#         batch_size = len(data)
+#         frames = [np.zeros((20, 4096)) for _ in range(batch_size)]
+#         captions = [[0] * 46 for _ in range(batch_size)]
+#         target_weights = [[0.0] * 46 for _ in range(batch_size)]
 
-        for i, (frame, caption) in enumerate(data):
-            for j in range(20):
-                frames[i][j] = frame[j*4]
-            for j, word in enumerate(caption):
-                captions[i][j] = word
-                target_weights[i][j] = 1.0
+#         for i, (frame, caption) in enumerate(data):
+#             for j in range(20):
+#                 frames[i][j] = frame[j*4]
+#             for j, word in enumerate(caption):
+#                 captions[i][j] = word
+#                 target_weights[i][j] = 1.0
 
-        return frames, captions, target_weights
+#         return frames, captions, target_weights
 
 
     def __len__(self):
