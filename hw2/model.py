@@ -429,10 +429,10 @@ class Effective_attention_model():
         ## two lstm param
         with tf.variable_scope("att_lstm"):
             att_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
-            #att_lstm = tf.contrib.rnn.DropoutWrapper(att_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)
+            att_lstm = tf.contrib.rnn.DropoutWrapper(att_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)
         with tf.variable_scope("cap_lstm"):
             cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)        
-            #cap_lstm = tf.contrib.rnn.DropoutWrapper(cap_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)                
+            cap_lstm = tf.contrib.rnn.DropoutWrapper(cap_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)                
         
         att_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
         cap_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
@@ -469,7 +469,7 @@ class Effective_attention_model():
         def train_cap(input_lstm,real_ans,prev_decoder_output,prev_attention_output,global_step,prev_state):
             
            with tf.device('cpu:0'):
-              word_index = tf.cond(self.scheduled_sampling_prob <= tf.random_uniform([], 0, 1),
+              word_index = tf.cond(self.scheduled_sampling_prob >= tf.random_uniform([], 0, 1),
                                 lambda:real_ans,
                                 lambda:tf.argmax(prev_decoder_output, axis=1))
               #word_index = tf.argmax(real_ans, axis=1)
