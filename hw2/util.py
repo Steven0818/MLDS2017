@@ -14,7 +14,7 @@ VOCAB_COUNT = 3000
 
 PAD_ID = 0
 UNK_ID = 1
-BOS_ID = 2
+BOS_ID = 4
 
 
 """
@@ -132,7 +132,6 @@ class Data:
             _captions.append(
                 [self.word2idx[w] if w in self.word2idx else UNK_ID for w in words])
             _captions[-1].insert(0, BOS_ID)
-
         return _id, _captions
 
     def get_feat(self, cid):

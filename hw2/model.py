@@ -200,10 +200,10 @@ class S2VT_attention_model():
         ## two lstm param
         with tf.variable_scope("att_lstm"):
             att_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
-            att_lstm = tf.contrib.rnn.DropoutWrapper(att_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)
+            #att_lstm = tf.contrib.rnn.DropoutWrapper(att_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)
         with tf.variable_scope("cap_lstm"):
             cap_lstm = tf.contrib.rnn.LSTMCell(dim_hidden)
-            cap_lstm = tf.contrib.rnn.DropoutWrapper(cap_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)            
+            #cap_lstm = tf.contrib.rnn.DropoutWrapper(cap_lstm,input_keep_prob=self.keep_prob, output_keep_prob=self.keep_prob)            
         
         att_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
         cap_state = (tf.zeros([self.batch_size, dim_hidden]),tf.zeros([self.batch_size, dim_hidden]))
@@ -239,7 +239,7 @@ class S2VT_attention_model():
         ## Decoding stage
         ## Training util
         def train_cap(input_lstm,prev_endcoder_output,real_ans,prev_decoder_output,global_step,prev_state):
-           word_index = tf.cond(self.scheduled_sampling_prob >= tf.random_uniform([], 0, 1),
+           word_index = tf.cond(self.scheduled_sampling_prob <= tf.random_uniform([], 0, 1),
                                 lambda: real_ans,
                                 lambda: tf.argmax(prev_decoder_output, axis=1))
            with tf.device('/cpu:0'):
@@ -363,13 +363,24 @@ class S2VT_attention_model():
         ## (batch_size,1,dim_hidden)*(batch_size,dim_hidden,frame_step)
         score = tf.matmul(tf.expand_dims(tf.matmul(decode_vec,wa),1),encode_vecs_t)
         score = tf.reshape(score,[self.batch_size,self.frame_steps])
-        ## (batch_size,frame_step)
-        
+        ## (batch_size,frame_step):
         return score
+
+
+    def saveModel(self,filepath):
+        global_step = self.sess.run(self.global_step)
+        saver = tf.train.Saver()
+        saver.save(self.sess, './'+filepath+'_para/model_%d.ckpt' % (global_step))
+        
+    def loadModel(self, model_path):
+        saver = tf.train.Saver(restore_sequentially=True)
+        saver.restore(self.sess, model_path)
+
+
 
 class Effective_attention_model():
   
-    def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=200, schedule_sampling_converge=500):
+    def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=200):
         
         self.frame_steps = frame_steps
         self.frame_feat_dim = frame_feat_dim
@@ -456,16 +467,15 @@ class Effective_attention_model():
         ## Decoding stage
         ## Training util
         def train_cap(input_lstm,real_ans,prev_decoder_output,prev_attention_output,global_step,prev_state):
-           word_index = tf.cond(self.scheduled_sampling_prob >= tf.random_uniform([], 0, 1),
-                                lambda: real_ans,
-                                lambda: tf.argmax(prev_decoder_output, axis=1))
             
-           with tf.device('/cpu:0'):
-                #word_index = tf.argmax(prev_decoder_output,axis = 1)
-                word_embed = tf.nn.embedding_lookup(embedding,word_index)
-                output, state = input_lstm(
-                    tf.concat([word_embed, prev_attention_output], 1), prev_state)
-                m_state, c_state = state
+           with tf.device('cpu:0'):
+              word_index = tf.cond(self.scheduled_sampling_prob <= tf.random_uniform([], 0, 1),
+                                lambda:real_ans,
+                                lambda:tf.argmax(prev_decoder_output, axis=1))
+              #word_index = tf.argmax(real_ans, axis=1)
+              word_embed = tf.nn.embedding_lookup(embedding, word_index)      
+           output, state = input_lstm(tf.concat([word_embed, prev_attention_output], 1), prev_state)
+           m_state, c_state = state
            return output, m_state, c_state
         def test_cap(input_lstm, prev_decoder_output, prev_attention_output,prev_state):
             ##  TODO: beam search
@@ -490,8 +500,8 @@ class Effective_attention_model():
                 tf.get_variable_scope().reuse_variables()
                 output2, cap_state = cap_lstm(output1,cap_state)
             ## Attention
-            #attention_output = self.global_attention(output2,enc_lstm_outputs,wa)
-            attention_output = self.local_attention(output2,enc_lstm_outputs,wp,vp,wa)
+            attention_output = self.global_attention(output2,enc_lstm_outputs,wa)
+            #attention_output = self.local_attention(output2,enc_lstm_outputs,wp,vp,wa)
             concat_output = tf.concat([attention_output,output2] , 1)
             attention_output = tf.tanh(tf.matmul(concat_output,wc))  
             prev_step_word = tf.nn.xw_plus_b(attention_output, w_word_onehot, b_word_onehot)
@@ -512,7 +522,7 @@ class Effective_attention_model():
         
         self.cost = tf.reduce_mean(loss)
         #self.global_step = tf.Variable(0, trainable=False)
-        self.train_op = tf.train.AdamOptimizer(learning_rate = 0.0005).minimize(self.cost, global_step=self.global_step)
+        self.train_op = tf.train.AdamOptimizer(learning_rate = 0.001).minimize(self.cost, global_step=self.global_step)
         
 
         config = tf.ConfigProto(log_device_placement = True)
@@ -582,7 +592,14 @@ class Effective_attention_model():
         attention_vec = tf.map_fn(index_frame,[encode_vecs,local_center,pt,score],dtype=tf.float32)
         return attention_vec
                                 
+    def saveModel(self,filepath):
+        global_step = self.sess.run(self.global_step)
+        saver = tf.train.Saver()
+        saver.save(self.sess, './'+filepath+'_para/model_%d.ckpt' % (global_step))
         
+    def loadModel(self, model_path):
+        saver = tf.train.Saver(restore_sequentially=True)
+        saver.restore(self.sess, model_path)
     
 
     def score(self,decode_vec,encode_vecs,wa):
@@ -594,9 +611,10 @@ class Effective_attention_model():
         ## (batch_size,frame_step)
         
         return score
-
+"""
 class Adversary_S2VT_model():
-     def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=300):
+
+     def __init__(self,frame_steps=20, frame_feat_dim=4096, caption_steps=45, vocab_size=3000, dim_hidden=200):
         self.frame_steps = frame_steps
         self.frame_feat_dim = frame_feat_dim
         self.caption_steps = caption_steps
@@ -786,7 +804,7 @@ class Adversary_S2VT_model():
         self.cost = ratio*tf.reduce_mean(caption_loss)+(1-ratio)*frame_loss
         #self.global_step = tf.Variable(0, trainable=False)
         self.train_op = tf.train.AdamOptimizer(learning_rate = 0.001).minimize(self.cost, global_step=self.global_step)
-        
+        self.train_conv_op = tf.train.AdamOptimizer(learning_rate = 0.001).minimize(self.cost, var_list=[w_frame_embed,b_frame_embed,w_reframe_embed,b_reframe_embed,embedding,w_word_onehot,b_word_onehot],global_step=self.global_step) 
 
         config = tf.ConfigProto(log_device_placement = True)
         config.gpu_options.allow_growth = True
@@ -794,12 +812,21 @@ class Adversary_S2VT_model():
         self.sess = tf.Session(config=config)
 
      def train(self, input_frame, input_caption, input_caption_mask, keep_prob=0.5, scheduled_sampling_prob=0.0):
-        _,cost = self.sess.run([self.train_op,self.cost],feed_dict={self.frame:input_frame, 
-                                                                    self.caption:input_caption, 
-                                                                    self.caption_mask:input_caption_mask,
-                                                                    self.train_state:True,
-                                                                    self.scheduled_sampling_prob:scheduled_sampling_prob,
-                                                                    self.keep_prob:keep_prob})
+        if scheduled_sampling_prob == 1:
+            _,cost = self.sess.run([self.train_conv_op,self.cost],feed_dict={self.frame:input_frame, 
+                                                                        self.caption:input_caption, 
+                                                                        self.caption_mask:input_caption_mask,
+                                                                        self.train_state:True,
+                                                                        self.scheduled_sampling_prob:scheduled_sampling_prob,
+                                                                        self.keep_prob:keep_prob})
+        else:
+            _,cost = self.sess.run([self.train_op,self.cost],feed_dict={self.frame:input_frame, 
+                                                                        self.caption:input_caption, 
+                                                                        self.caption_mask:input_caption_mask,
+                                                                        self.train_state:True,
+                                                                        self.scheduled_sampling_prob:scheduled_sampling_prob,
+                                                                        self.keep_prob:keep_prob})
+                                        
         return cost
    
      def predict(self, input_frame):
@@ -812,3 +839,13 @@ class Adversary_S2VT_model():
         return words
      def initialize(self):
         self.sess.run(tf.global_variables_initializer()) 
+
+     def saveModel(self,filepath):
+        global_step = self.sess.run(self.global_step)
+        saver = tf.train.Saver()
+        saver.save(self.sess, './'+filepath+'_para/model_%d.ckpt' % (global_step))
+        
+     def loadModel(self, model_path):
+        saver = tf.train.Saver(restore_sequentially=True)
+        saver.restore(self.sess, model_path)
+"""

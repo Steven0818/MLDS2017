@@ -14,6 +14,7 @@ BATCH_SIZE = 100
 CAPTION_STEP = 45
 EPOCH = 1000
 SCHEDULED_SAMPLING_CONVERGE = 5000
+MODEL_FILE_NAME = 'result_schedule'
 
 
 train_npy_path = 'data/training_data/feat'
@@ -24,7 +25,7 @@ def trim(sen):
     else:
         return sen
 
-def test(model, test_data, dict_rev, global_step, output_path='result/' , train_test='test'):
+def test(model, test_data, dict_rev, global_step, output_path= MODEL_FILE_NAME+'/' , train_test='test'):
     answers = []
     score = 0
     for x, video_ids, captions in test_data:
@@ -88,6 +89,7 @@ def main():
     global_step = 0
     epoch_count = 1
     epoch_size = len(data)
+    print (epoch_size)
     loader = data.loader()
     print ("training start....")
     for i in range(int(len(data) * EPOCH / BATCH_SIZE)):  
@@ -101,9 +103,10 @@ def main():
         #print ('each step time cost: {0}'.format(finish_time-start_time))
         if global_step % 100 == 0:
             print('global_step {0} cost: {1}'.format(global_step, cost))
-        if global_step % 1000 == 0:
+        if global_step % 2000 == 0:
             test(S2VT, test_batch, d_idx2word, global_step,train_test = 'test')
             test(S2VT, train_test_batch, d_idx2word, global_step,train_test = 'train')
+            S2VT.saveModel(MODEL_FILE_NAME)
         if i * BATCH_SIZE > epoch_count * epoch_size:
             print('Epoch {0} end'.format(epoch_count))
             epoch_count += 1
