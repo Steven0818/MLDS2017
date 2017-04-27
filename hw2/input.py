@@ -96,3 +96,17 @@ class TestDataLoader():
                 x_batch[j, ...] = x
             ret.append((x_batch, self.video_names[i:end], self.captions[i:end]))
         return ret
+
+    def get_all_data(self):
+
+        x_batch = np.zeros((len(self.video_names), self.frame_step,
+                            self.frame_dim), dtype=np.float32)
+        for i in range(len(self.video_names)):
+
+            filename = self.video_names[i]
+            filepath = os.path.join(self.data_path, filename + '.npy')
+            x = np.load(filepath)
+            x = np.asarray([x[k * 2, :]for k in range(self.frame_step)])
+            x_batch[i, ...] = x
+
+        return (x_batch, self.video_names, self.captions)
