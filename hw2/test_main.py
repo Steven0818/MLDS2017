@@ -17,6 +17,12 @@ SCHEDULED_SAMPLING_CONVERGE = 5000
 MODEL_FILE_NAME = 'result_schedule'
 
 
+def trim(sen):
+    if 3 in sen:
+        return sen[:sen.index(3)]
+    else:
+        return sen
+
 def test(model, test_data, dict_rev):
     answers = []
     score = 0
@@ -30,7 +36,7 @@ def test(model, test_data, dict_rev):
 
 def main():
 
-    d_idx2word = json.load(open('data/dict_rev.json', 'r'))
+    d_idx2word = json.load(open('dict_rev.json', 'r'))
 
 
     feature_path = sys.argv[2]
@@ -45,7 +51,7 @@ def main():
                                         shuffle=False
                                         )
     S2VT = model.Effective_attention_model(caption_steps=CAPTION_STEP)
-    S2VT.loadModel('result_schedule_para/model_30000.ckpt')
+    S2VT.loadModel('./model_30000.ckpt')
     test_batch = test_data_loader.get_data(BATCH_SIZE)
     test(S2VT, test_batch, d_idx2word)
 
