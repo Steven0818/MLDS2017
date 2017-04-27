@@ -92,6 +92,7 @@ class BeamSearch(object):
     steps = 0
     while steps < self._max_steps and len(results) < self._beam_size:
       latest_tokens = [h.latest_token for h in hyps]
+      print(latest_tokens)
       states = [h.state for h in hyps]
 
       topk_ids, topk_log_probs, new_states = self._model.decode_topk(
