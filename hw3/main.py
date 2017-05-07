@@ -7,7 +7,7 @@ Z_DIM = 100
 def main():
     dataLoader = DataLoader("data/faces", IMG_SHAPE)
     
-    model = GAN_model(z_dim=Z_DIM, batch_size=100, learning_rate=0.0002, img_shape=IMG_SHAPE)
+    model = GAN_model(z_dim=Z_DIM, batch_size=100, learning_rate=0.0002, img_shape=IMG_SHAPE, optimizer_name='Adam')
 
     model.create_computing_graph()
     model.initialize_network()
