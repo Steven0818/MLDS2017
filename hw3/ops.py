@@ -5,53 +5,59 @@ import matplotlib.pyplot as plt
 import os
 import cv2
 
-def z_fc_layer(name, input, n_neuron, img_size, activation, train_phase):
+def z_fc_layer(name, input, n_neuron, img_size, add_bias=True, activation=tf.nn.relu, train_phase=True):
     
     in_size = input.get_shape().as_list()[1]
     n_chn = n_neuron // img_size // img_size
     
     weights = tf.get_variable('w_' + name, shape=[in_size, n_neuron], initializer=tf.contrib.layers.xavier_initializer(dtype=tf.float32))
-    biases = tf.get_variable('b_' + name, shape=[n_neuron], initializer=tf.constant_initializer(0.0, dtype=tf.float32))
+    h = tf.matmul(input, weights) 
+
+    if add_bias:
+        biases = tf.get_variable('b_' + name, shape=[n_neuron], initializer=tf.constant_initializer(0.0, dtype=tf.float32))
+        h = h + biases
     
-    h = tf.matmul(input, weights) + biases
     h = tf.reshape(h, [-1, img_size, img_size, n_chn])
     h_bn = batch_norm(name, h, train_phase)
     
     return activation(h_bn, name='h_' + name)
     
     
-def transpose_conv_layer(name, input , ksize, output_shape, strides, activation, train_phase):
+def transpose_conv_layer(name, input , ksize, output_shape, strides=[1,2,2,1], add_bias=True, activation=tf.nn.relu, train_phase=True):
     weights = tf.get_variable('w_' + name, shape=ksize, initializer=tf.contrib.layers.xavier_initializer(dtype=tf.float32))
-    biases = tf.get_variable('b_' + name, shape=[ksize[2]], initializer=tf.constant_initializer(0.0, dtype=tf.float32))
-    
     conv = tf.nn.conv2d_transpose(input, weights, output_shape, strides=strides, padding='SAME')
-    conv = tf.nn.bias_add(conv, biases)
+
+    if add_bias:
+        biases = tf.get_variable('b_' + name, shape=[ksize[2]], initializer=tf.constant_initializer(0.0, dtype=tf.float32))
+        conv = tf.nn.bias_add(conv, biases)
+
     conv_bn = batch_norm(name, conv, train_phase)
-    
-    return activation(conv_bn, name='h_' + name)    
+    return activation(conv_bn, name='h_' + name)
 
     
-def conv_layer(name, input, ksize, strides, do_bn, activation, train_phase):
+def conv_layer(name, input, ksize, strides=[1,2,2,1], add_bias=True, do_bn=True, activation=tf.nn.relu, train_phase=True):
     
     weights = tf.get_variable('w_' + name, shape=ksize, initializer=tf.contrib.layers.xavier_initializer(dtype=tf.float32))
-    biases = tf.get_variable('b_' + name, shape=[ksize[3]], initializer=tf.constant_initializer(0.0, dtype=tf.float32))
-    
     conv = tf.nn.conv2d(input, weights, strides=strides, padding='SAME')
-    conv = tf.nn.bias_add(conv, biases)
-    
+
+    if add_bias:
+        biases = tf.get_variable('b_' + name, shape=[ksize[3]], initializer=tf.constant_initializer(0.0, dtype=tf.float32))
+        conv = tf.nn.bias_add(conv, biases)
+
     if do_bn:
         conv = batch_norm(name, conv, train_phase)
     
     return activation(conv, name='h_' + name) 
 
-def rf_fc_layer(name, input, n_neuron):
-    
+def rf_fc_layer(name, input, n_neuron, add_bias=False):
     in_size = input.get_shape().as_list()[1]
 
     weights = tf.get_variable('w_' + name, shape=[in_size, n_neuron], initializer=tf.contrib.layers.xavier_initializer(dtype=tf.float32))
-    biases = tf.get_variable('b_' + name, shape=[n_neuron], initializer=tf.constant_initializer(0.0, dtype=tf.float32))
+    h = tf.matmul(input, weights)
     
-    h = tf.matmul(input, weights) + biases
+    if add_bias:
+        biases = tf.get_variable('b_' + name, shape=[n_neuron], initializer=tf.constant_initializer(0.0, dtype=tf.float32))
+        h = h + biases
     
     return h
     
