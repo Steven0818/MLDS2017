@@ -9,7 +9,7 @@ class GAN_model():
         self.learning_rate = learning_rate
         self.img_shape = img_shape
         self.pool_size = img_shape[0] // (2**4)
-        self.optimizer_name = optimizer
+        self.optimizer_name = optimizer_name
     
     def create_computing_graph(self):
         print("Setting up model...")
@@ -227,11 +227,11 @@ class GAN_model():
         ops.save_imshow_grid(images, img_dir, "generated_%d.png" % self.global_steps, shape)
 
 class WGAN_model(GAN_model):
-    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(96, 96, 3), optimizer='RMSProp',
+    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(96, 96, 3), optimizer_name='RMSProp',
                        clip_value=(-0.01, 0.01), iter_ratio=5):
         self.clip_value = clip_value
         self.iter_ratio = iter_ratio
-        GAN_model.__init__(z_dim, batch_size, learning_rate, img_shape)
+        GAN_model.__init__(self, z_dim, batch_size, learning_rate, img_shape, optimizer_name)
     
     def _generator(self, z, train_phase, scope_name='generator'):
         shrink_size = self.pool_size
@@ -343,7 +343,7 @@ class WGAN_model(GAN_model):
         
     def train_model(self, dataLoader, max_epoch):
         self.global_steps = 0
-        clip_discriminator_var_op = [var.assign(tf.clip_by_value(var, self.clip_values[0], self.clip_values[1])) for
+        clip_discriminator_var_op = [var.assign(tf.clip_by_value(var, self.clip_value[0], self.clip_value[1])) for
                                          var in self.discriminator_variables]
 
         for i in range(max_epoch):
@@ -359,7 +359,7 @@ class WGAN_model(GAN_model):
                 else:
                     iteration = self.iter_ratio
 
-                for it_r in iteration:
+                for it_r in range(iteration):
                     self.sess.run(self.discriminator_train_op, feed_dict=feed_dict)
                     self.sess.run(clip_discriminator_var_op)
                     
