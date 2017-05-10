@@ -10,7 +10,7 @@ class GAN_model():
         self.learning_rate = learning_rate
         self.img_shape = img_shape
         self.pool_size = img_shape[0] // (2**4)
-        self.optimizer_name = optimizer
+        self.optimizer_name = optimizer_name
     
     def create_computing_graph(self):
         print("Setting up model...")
@@ -228,11 +228,11 @@ class GAN_model():
         ops.save_imshow_grid(images, img_dir, "generated_%d.png" % self.global_steps, shape)
 
 class WGAN_model(GAN_model):
-    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(96, 96, 3), optimizer='RMSProp',
+    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(96, 96, 3), optimizer_name='RMSProp',
                        clip_value=(-0.01, 0.01), iter_ratio=5):
         self.clip_value = clip_value
         self.iter_ratio = iter_ratio
-        GAN_model.__init__(z_dim, batch_size, learning_rate, img_shape) 
+        GAN_model.__init__(self, z_dim, batch_size, learning_rate, img_shape) 
 
     def _generator(self, z, train_phase, scope_name='generator'):
         shrink_size = self.pool_size
@@ -344,7 +344,7 @@ class WGAN_model(GAN_model):
         
     def train_model(self, dataLoader, max_epoch):
         self.global_steps = 0
-        clip_discriminator_var_op = [var.assign(tf.clip_by_value(var, self.clip_values[0], self.clip_values[1])) for
+        clip_discriminator_var_op = [var.assign(tf.clip_by_value(var, self.clip_value[0], self.clip_value[1])) for
                                          var in self.discriminator_variables]
 
         for i in range(max_epoch):
@@ -360,7 +360,7 @@ class WGAN_model(GAN_model):
                 else:
                     iteration = self.iter_ratio
 
-                for it_r in iteration:
+                for it_r in range(iteration):
                     self.sess.run(self.discriminator_train_op, feed_dict=feed_dict)
                     self.sess.run(clip_discriminator_var_op)
                     
@@ -378,11 +378,11 @@ class WGAN_model(GAN_model):
                 self._visualize_model('wresult')    
 
 class WGAN_model2(GAN_model):
-    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(96, 96, 3), optimizer='RMSProp',
+    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(96, 96, 3), optimizer_name='RMSProp',
                        clip_value=(-0.01, 0.01), iter_ratio=5):
         self.clip_value = clip_value
         self.iter_ratio = iter_ratio
-        GAN_model.__init__(z_dim, batch_size, learning_rate, img_shape)
+        GAN_model.__init__(self, z_dim, batch_size, learning_rate, img_shape)
     
     def create_computing_graph(self):
         print("Setting up model...")
@@ -421,17 +421,17 @@ class WGAN_model2(GAN_model):
                                                                   optimizer=partial(tf.train.AdamOptimizer, beta1=0.5, beta2=0.9) 
                                                                                     if self.optimizer_name == 'Adam' 
                                                                                     else tf.train.RMSPropOptimizer, 
-                                                                  variables=tf.generator_variables, 
+                                                                  variables=self.generator_variables, 
                                                                   global_step=counter_g)
     
-        self.discriminator_train_op = tf.contrib.layers.optimize_loss(loss=self.discriminator_loss, learning_rate=learning_rate,
+        self.discriminator_train_op = tf.contrib.layers.optimize_loss(loss=self.discriminator_loss, learning_rate=self.learning_rate,
                                                                       optimizer=partial(tf.train.AdamOptimizer, beta1=0.5, beta2=0.9) 
                                                                                         if self.optimizer_name == 'Adam' 
                                                                                         else tf.train.RMSPropOptimizer, 
-                                                                      variables=tf.discriminator_variables, 
+                                                                      variables=self.discriminator_variables, 
                                                                       global_step=counter_d)
                                             
-        clipped_var_c = [tf.assign(var, tf.clip_by_value(var, self.clip_value[0], self.clip_value[1])) for var in tf.discriminator_variables]
+        clipped_var_c = [tf.assign(var, tf.clip_by_value(var, self.clip_value[0], self.clip_value[1])) for var in self.discriminator_variables]
         # merge the clip operations on critic variables
         with tf.control_dependencies([self.discriminator_train_op]):
             self.discriminator_train_op = tf.tuple(clipped_var_c)
@@ -441,7 +441,7 @@ class WGAN_model2(GAN_model):
         with tf.variable_scope(scope_name) as scope:
             train = tf.contrib.layers.fully_connected(z, shrink_size * shrink_size * 1024, 
                                                       activation_fn=ops.leaky_relu, 
-                                                      normalizer_fn=tf.contrib.layersly.batch_norm)
+                                                      normalizer_fn=tf.contrib.layers.batch_norm)
             train = tf.reshape(train, (-1, shrink_size, shrink_size, 1024))
             train = tf.contrib.layers.conv2d_transpose(train, 512, 5, stride=2,
                                         activation_fn=tf.nn.relu, 
@@ -471,21 +471,21 @@ class WGAN_model2(GAN_model):
             if reuse:
                 scope.reuse_variables()
             
-                img = tf.contrib.layers.conv2d(input_img, num_outputs=64, kernel_size=5, stride=2, 
-                                               activation_fn=ops.leaky_relu)
-                img = tf.contrib.layers.conv2d(img, num_outputs=128, kernel_size=5, stride=2, 
-                                               activation_fn=ops.leaky_relu, 
-                                               normalizer_fn=tf.contrib.layers.batch_norm,
-                                               normalizer_params={'is_training':self.train_phase})
-                img = tf.contrib.layers.conv2d(img, num_outputs=256, kernel_size=5, strides=2,
-                                               activation_fn=ops.leaky_relu, 
-                                               normalizer_fn=tf.contrib.layers.batch_norm,
-                                               normalizer_params={'is_training':self.train_phase})                            
-                img = tf.contrib.layersy.conv2d(img, num_outputs=512, kernel_size=5, strides=2,
-                                               activation_fn=ops.leaky_relu, 
-                                               normalizer_fn=tf.contrib.layers.batch_norm,
-                                               normalizer_params={'is_training':self.train_phase})
-                logit = tf.contrib.layers.fully_connected(tf.reshape(img, [self.batch_size, -1]), 1, activation_fn=None)
+            img = tf.contrib.layers.conv2d(input_img, num_outputs=64, kernel_size=5, stride=2, 
+                                           activation_fn=ops.leaky_relu)
+            img = tf.contrib.layers.conv2d(img, num_outputs=128, kernel_size=5, stride=2, 
+                                           activation_fn=ops.leaky_relu, 
+                                           normalizer_fn=tf.contrib.layers.batch_norm,
+                                           normalizer_params={'is_training':self.train_phase})
+            img = tf.contrib.layers.conv2d(img, num_outputs=256, kernel_size=5, stride=2,
+                                           activation_fn=ops.leaky_relu, 
+                                           normalizer_fn=tf.contrib.layers.batch_norm,
+                                           normalizer_params={'is_training':self.train_phase})                            
+            img = tf.contrib.layers.conv2d(img, num_outputs=512, kernel_size=5, stride=2,
+                                           activation_fn=ops.leaky_relu, 
+                                           normalizer_fn=tf.contrib.layers.batch_norm,
+                                           normalizer_params={'is_training':self.train_phase})
+            logit = tf.contrib.layers.fully_connected(tf.reshape(img, [self.batch_size, -1]), 1, activation_fn=None)
                 
         return None, logit, None
          
@@ -513,7 +513,7 @@ class WGAN_model2(GAN_model):
                 else:
                     iteration = self.iter_ratio
 
-                for it_r in iteration:
+                for it_r in range(iteration):
                     self.sess.run(self.discriminator_train_op, feed_dict=feed_dict)
                     
                 self.sess.run(self.generator_train_op, feed_dict=feed_dict)
