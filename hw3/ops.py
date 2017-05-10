@@ -68,8 +68,8 @@ def batch_norm(name, input, train_phase):
             lambda: tf.contrib.layers.batch_norm(input, is_training=False,
                     updates_collections=None, center=True, scale=True, scope="bn_" + name, reuse = True))
 
-def leaky_relu(x, alpha=0.2, name=""):
-    return tf.maximum(alpha * x, x, name)                    
+def leaky_relu(x, alpha=0.2):
+    return tf.maximum(alpha * x, x)                    
                     
 def unprocess_image(image, mean_pixel, norm):
     return image * norm + mean_pixel 

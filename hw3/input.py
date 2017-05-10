@@ -61,7 +61,6 @@ class DataLoader:
     
     def _load_image(self, imgpath):
         im = cv2.imread(imgpath)
-        im.astype(np.float32)
         
-        return im
+        return (im.astype(np.float32) - 127.5) / 255.
     
