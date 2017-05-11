@@ -1,6 +1,6 @@
 import numpy as np
 import random
-import cv2
+from PIL import Image
 import os
 from os import path
 import queue
@@ -60,8 +60,6 @@ class DataLoader:
             yield imgs
     
     def _load_image(self, imgpath):
-        im = cv2.imread(imgpath)
-        resize_im = cv2.resize(im,(64,64),interpolation=cv2.INTER_CUBIC)
-        
-        return (resize_im.astype(np.float32) - 127.5) / 127.5
+        im = Image.open(imgpath)
+        return (np.asarray(im, dtype=np.float32) - 127.5) / 127.5.
     

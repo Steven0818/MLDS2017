@@ -2,8 +2,8 @@ import tensorflow as tf
 import numpy as np
 from mpl_toolkits.axes_grid1 import ImageGrid
 import matplotlib.pyplot as plt
+from PIL import Image
 import os
-import cv2
 
 def z_fc_layer(name, input, n_neuron, img_size, add_bias=True, activation=tf.nn.relu, train_phase=True):
     
@@ -84,4 +84,9 @@ def save_imshow_grid(images, result_dir, filename, grid_shape):
         for y in range(grid_shape[1]):
             img_grid[x*img_shape[0]: (x+1)*img_shape[0], y*img_shape[1]: (y+1)*img_shape[1],:] = images[x*grid_shape[0]+y]
     
+<<<<<<< HEAD
     cv2.imwrite(os.path.join(result_dir, filename), img_grid)
+=======
+    img = Image.fromarray(img_grid, 'RGB')
+    img.save(os.path.join(result_dir, filename))
+>>>>>>> replace cv with pil
