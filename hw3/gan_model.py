@@ -49,6 +49,7 @@ class GAN_model():
             discriminator_grad = optimizer.compute_gradients(self.discriminator_loss, self.discriminator_variables)
             self.generator_train_op = optimizer.apply_gradients(generator_grads)
             self.discriminator_train_op = optimizer.apply_gradients(discriminator_grad)
+        self.summaries = tf.summary.merge_all()
     
     def _create_placeholder(self):
         self.train_phase = tf.placeholder(tf.bool)
@@ -188,6 +189,7 @@ class GAN_model():
         self.saver = tf.train.Saver()
 
         self.sess.run(tf.global_variables_initializer())
+        self.summary_writer = tf.summary.FileWriter('./summary')
         
     def train_model(self, dataLoader, max_epoch):
         self.global_steps = 0
