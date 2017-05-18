@@ -47,7 +47,7 @@ def conv_layer(name, input, ksize, strides=[1,2,2,1], add_bias=True, do_bn=True,
     if do_bn:
         conv = batch_norm(name, conv, train_phase)
     
-    return activation(conv, name='h_' + name) 
+    return activation(conv, name='h_' + name)
 
 def rf_fc_layer(name, input, n_neuron, add_bias=False):
     in_size = input.get_shape().as_list()[1]

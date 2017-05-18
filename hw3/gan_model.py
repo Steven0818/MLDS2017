@@ -285,8 +285,10 @@ class WGAN_model2(GAN_model):
                                             
         clipped_var_c = [tf.assign(var, tf.clip_by_value(var, self.clip_value[0], self.clip_value[1])) for var in self.discriminator_variables]
         # merge the clip operations on critic variables
+        
         with tf.control_dependencies([self.discriminator_train_op]):
             self.discriminator_train_op = tf.tuple(clipped_var_c)
+        self.summaries = tf.summary.merge_all()
 
     def _generator(self, z, train_phase, scope_name='generator'):
         shrink_size = self.pool_size
@@ -344,10 +346,11 @@ class WGAN_model2(GAN_model):
          
     def _discriminator_loss(self, logits_real, logits_fake):
         self.discriminator_loss = tf.reduce_mean(logits_fake-logits_real)
-        
+        tf.summary.scalar('discriminator_loss', self.discriminator_loss)
     
     def _generator_loss(self, logits_fake, feature_fake, feature_real):
         self.generator_loss = tf.reduce_mean(-logits_fake)
+        tf.summary.scalar('generator_loss', self.generator_loss)
         
     def train_model(self, dataLoader, max_iteration):
         self.global_steps = 0
@@ -376,13 +379,13 @@ class WGAN_model2(GAN_model):
             for it_r in range(iteration):
                 self.sess.run(self.discriminator_train_op, feed_dict=next(gen))
                 
-            self.sess.run(self.generator_train_op, feed_dict=next(gen))
-    
+            _, summaries = self.sess.run([self.generator_train_op, self.summaries], feed_dict=next(gen))
+            self.summary_writer.add_summary(summaries, self.global_steps)
             if self.global_steps % 20 == 0 and self.global_steps != 0:
                 g_loss_val, d_loss_val = self.sess.run(
                     [self.generator_loss, self.discriminator_loss], feed_dict=next(gen))
                 print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g" % (i, self.global_steps, g_loss_val, d_loss_val))
-                
+                self.summary_writer.flush()
             self.global_steps += 1
         
             if i % 600 == 0 and i != 0:
