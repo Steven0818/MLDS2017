@@ -6,7 +6,7 @@ from gan_model import GAN_model
 
 class conditional_WGAN_model(GAN_model):
     def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(64, 64, 3), optimizer_name='RMSProp',
-                       tag_dim = 23, tag_embed_dim = 50, clip_value=(-0.01, 0.01), iter_ratio=5):
+                       tag_dim = 22, tag_embed_dim = 50, clip_value=(-0.01, 0.01), iter_ratio=5):
         self.clip_value = clip_value
         self.iter_ratio = iter_ratio
         self.tag_dim = tag_dim
@@ -194,7 +194,7 @@ class conditional_WGAN_model(GAN_model):
         
         batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
         correct_tag = np.zeros([self.batch_size, self.tag_dim], dtype=np.float32)
-        correct_tag[:,0] = 1.
+        correct_tag[:,1] = 1.
         correct_tag[:-1] = 1.
         feed_dict = {self.z_vec: batch_z, self.tag_vec: correct_tag, self.train_phase: False}
 

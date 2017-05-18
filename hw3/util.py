@@ -4,8 +4,8 @@ from collections import Counter
 def create_tags_json(infile='data/tags_clean.csv', outfile='tags.json'):
     tags_id2idx_dict = {}
 
-    #12
-    eyes_color_list = ['gray', 'aqua', 'orange', 'bicolored', 'red', 'blue', 'black', 'pink', 'green', 'brown', 'purple', 'yellow']
+    #11
+    eyes_color_list = ['gray', 'aqua', 'orange', 'red', 'blue', 'black', 'pink', 'green', 'brown', 'purple', 'yellow']
     #11
     hair_color_list = ['gray', 'aqua', 'pink', 'white', 'red', 'purple', 'blue', 'black', 'green', 'brown', 'orange']
 
