@@ -9,7 +9,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 class DataLoader:
-    def __init__(self, img_dir, img_shape, caption_json, n_eye_types=12, n_hair_types=11):
+    def __init__(self, img_dir, img_shape, caption_json, n_eye_types=11, n_hair_types=11):
         self.file_ids, self.filepaths = self._get_img_path(img_dir)
         self.n_data = len(self.filepaths)
         self.img_shape = img_shape
