@@ -30,7 +30,7 @@ class DataLoader:
         QUEUE_END = '__QUEUE_END105834569xx'
         
         def load(q, batch_size):     
-            with ThreadPoolExecutor(max_workers=50) as pool:
+            with ThreadPoolExecutor(max_workers=25) as pool:
                 for i in range(0, self.n_data, batch_size): 
                     if i + batch_size <= self.n_data:
                         end_idx = i + batch_size
@@ -47,7 +47,7 @@ class DataLoader:
                     imgs = np.array(images)
                     q.put(imgs)
             
-        q = queue.Queue(maxsize=50)
+        q = queue.Queue(maxsize=30)
         t = threading.Thread(target=load, args=(q, batch_size))
         t.daemon = True
         t.start()
@@ -61,6 +61,7 @@ class DataLoader:
     
     def _load_image(self, imgpath):
         im = cv2.imread(imgpath)
+        resize_im = cv2.resize(im,(64,64),interpolation=cv2.INTER_CUBIC)
         
-        return (im.astype(np.float32) - 127.5) / 255.
+        return (resize_im.astype(np.float32) - 127.5) / 127.5
     

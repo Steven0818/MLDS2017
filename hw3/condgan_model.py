@@ -147,11 +147,11 @@ class conditional_WGAN_model(GAN_model):
          
          
     def _discriminator_loss(self, logits_real, logits_fake, logits_wtag):
-        self.discriminator_loss = tf.reduce_mean(logits_wtag + logits_fake - 2 * logits_real)
+        self.discriminator_loss = tf.reduce_mean((logits_wtag + logits_fake) / 2 - * logits_real)
         
     
     def _generator_loss(self, logits_fake, logits_wtag, feature_fake, feature_real):
-        self.generator_loss = tf.reduce_mean(-logits_fake-logits_wtag)
+        self.generator_loss = tf.reduce_mean((-logits_fake-logits_wtag)/2)
         
     def train_model(self, dataLoader, max_epoch):
         self.global_steps = 0
