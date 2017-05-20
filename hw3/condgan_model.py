@@ -147,45 +147,50 @@ class conditional_WGAN_model(GAN_model):
          
          
     def _discriminator_loss(self, logits_real, logits_fake, logits_wtag):
-        self.discriminator_loss = tf.reduce_mean((logits_wtag + logits_fake) / 2 - * logits_real)
+        self.discriminator_loss = tf.reduce_mean((logits_wtag + logits_fake) / 2 - logits_real)
         
     
     def _generator_loss(self, logits_fake, logits_wtag, feature_fake, feature_real):
         self.generator_loss = tf.reduce_mean((-logits_fake-logits_wtag)/2)
         
-    def train_model(self, dataLoader, max_epoch):
+    def train_model(self, dataLoader, max_iteration):
         self.global_steps = 0
+        self.epoch = 0
 
-        for i in range(max_epoch):
-            dataLoader.shuffle() 
-            batch_gen = dataLoader.batch_generator(batch_size=self.batch_size)
+        def next_feed_dict(loader, batch_size):
+            while True:
+                loader.shuffle()
+                batch_gen = loader.batch_generator(batch_size=batch_size)
+                self.epoch += 1
+                for batch_imgs, correct_tag, wrong_tag in batch_gen:
+                    batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
+                    feed_dict = {self.z_vec: batch_z, 
+                                 self.tag_vec: correct_tag, 
+                                 self.wtag_vec: wrong_tag, 
+                                 self.real_imgs: batch_imgs, 
+                                 self.train_phase: True}
+                    yield feed_dict
 
-            for batch_imgs, correct_tag, wrong_tag in batch_gen:
-                batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
-                feed_dict = {self.z_vec: batch_z, 
-                             self.tag_vec: correct_tag, 
-                             self.wtag_vec: wrong_tag, 
-                             self.real_imgs: batch_imgs, 
-                             self.train_phase: True}
-                
-                if self.global_steps < 25 or self.global_steps % 500 == 0:
-                    iteration = 40
-                else:
-                    iteration = self.iter_ratio
-
-                for it_r in range(iteration):
-                    self.sess.run(self.discriminator_train_op, feed_dict=feed_dict)
-                    
-                self.sess.run(self.generator_train_op, feed_dict=feed_dict)
-    
-                if self.global_steps % 20 == 0 and self.global_steps != 0:
-                    g_loss_val, d_loss_val = self.sess.run(
-                        [self.generator_loss, self.discriminator_loss], feed_dict=feed_dict)
-                    print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g" % (i, self.global_steps, g_loss_val, d_loss_val))
-                    
-                self.global_steps += 1
+        gen = next_feed_dict(dataLoader, self.batch_size)
+        
+        for i in range(max_iteration):
+            if self.global_steps < 25 or self.global_steps % 500 == 0:
+                iteration = 40
+            else:
+                iteration = self.iter_ratio  
             
-            if i % 4 == 0 and i != 0:
+            for it_r in range(iteration):
+                self.sess.run(self.discriminator_train_op, feed_dict=next(gen))
+
+            self.sess.run(self.generator_train_op, feed_dict=next(gen)) 
+            if self.global_steps % 20 == 0 and self.global_steps != 0:
+                g_loss_val, d_loss_val = self.sess.run(
+                    [self.generator_loss, self.discriminator_loss], feed_dict=next(gen))
+                print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g" % (i, self.global_steps, g_loss_val, d_loss_val))
+
+            self.global_steps += 1
+        
+            if i % 1000 == 0 and i != 0:
                 self.saver.save(self.sess, "cwmodel/cwmodel_%d.ckpt" % self.global_steps, global_step=self.global_steps)
                 self._visualize_model('cwresult')            
         

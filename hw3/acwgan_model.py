@@ -236,46 +236,50 @@ class ACWGAN_model(GAN_model):
     def _classifier_loss(self, logits, label):
         return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=label))
 
-    def train_model(self, dataLoader, max_epoch):
+    def train_model(self, dataLoader, max_iteration):
         self.global_steps = 0
+        self.epoch = 0
 
-        for i in range(max_epoch):
-            dataLoader.shuffle() 
-            batch_gen = dataLoader.batch_generator(batch_size=self.batch_size)
+        def next_feed_dict(loader, batch_size):
+            while True:
+                loader.shuffle()
+                batch_gen = loader.batch_generator(batch_size=batch_size)
+                self.epoch += 1
+                for batch_imgs, correct_tag, wrong_tag in batch_gen:
+                    batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
+                    feed_dict = {self.z_vec: batch_z,
+                                 self.eyes_vec: correct_tag[:,:11], 
+                                 self.hair_vec: correct_tag[:,11:], 
+                                 self.real_imgs: batch_imgs, 
+                                 self.train_phase: True}
+                    yield feed_dict
 
-            for batch_imgs, correct_tag, wrong_tag in batch_gen:
-                batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
-                feed_dict = {self.z_vec: batch_z, 
-                             self.eyes_vec: correct_tag[:,:11], 
-                             self.hair_vec: correct_tag[:,11:], 
-                             self.real_imgs: batch_imgs, 
-                             self.train_phase: True}
-                
-                if self.global_steps < 25 or self.global_steps % 500 == 0:
-                    iteration = 100
-                else:
-                    iteration = self.iter_ratio
+        gen = next_feed_dict(dataLoader, self.batch_size)
 
-                for it_r in range(iteration):
-                    self.sess.run(self.discriminator_train_op, feed_dict=feed_dict)
-                    
-                self.sess.run(self.generator_train_op, feed_dict=feed_dict)
-                
-                self.sess.run(self.eyes_gen_train_op, feed_dict=feed_dict)
-                self.sess.run(self.hair_gen_train_op, feed_dict=feed_dict)
+        for i in range(max_iteration):
+            if self.global_steps < 25 or self.global_steps % 500 == 0:
+                iteration = 100
+            else:
+                iteration = self.iter_ratio
+            for it_r in range(iteration):
+                self.sess.run(self.discriminator_train_op, feed_dict=next(gen))
 
-                self.sess.run(self.eyes_train_op, feed_dict=feed_dict)
-                self.sess.run(self.hair_train_op, feed_dict=feed_dict)
+            self.sess.run(self.generator_train_op, feed_dict=next(gen))
 
-                if self.global_steps % 20 == 0 and self.global_steps != 0:
-                    g_loss_val, d_loss_val, e_loss_val, h_loss_val = self.sess.run(
-                        [self.generator_loss, self.discriminator_loss, self.eyes_loss, self.hair_loss], feed_dict=feed_dict)
-                    print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g, eyes_loss: %g, hair_loss: %g" 
-                                    % (i, self.global_steps, g_loss_val, d_loss_val, e_loss_val, h_loss_val))
-                    
+            self.sess.run(self.eyes_gen_train_op, feed_dict=next(gen))
+            self.sess.run(self.hair_gen_train_op, feed_dict=next(gen))
+            self.sess.run(self.eyes_train_op, feed_dict=next(gen))
+            self.sess.run(self.hair_train_op, feed_dict=next(gen))
+            
+            if self.global_steps % 20 == 0 and self.global_steps != 0:
+                g_loss_val, d_loss_val, e_loss_val, h_loss_val = self.sess.run(
+                    [self.generator_loss, self.discriminator_loss, self.eyes_loss, self.hair_loss], feed_dict=next(gen))
+                print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g, eyes_loss: %g, hair_loss: %g" 
+                                % (i, self.global_steps, g_loss_val, d_loss_val, e_loss_val, h_loss_val))
+                            
                 self.global_steps += 1  
             
-            if i % 4 == 0 and i != 0:
+            if i % 1000 == 0 and i != 0:
                 self.saver.save(self.sess, "acwmodel/acwmodel_%d.ckpt" % self.global_steps, global_step=self.global_steps)
                 self._visualize_model('acwresult')            
         
