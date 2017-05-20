@@ -4,7 +4,7 @@ import ops
 from functools import partial
 
 class GAN_model():
-    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(96, 96, 3), optimizer_name='Adam'):
+    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(64, 64, 3), optimizer_name='Adam'):
         self.z_dim = z_dim
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -20,15 +20,15 @@ class GAN_model():
         
         # re-initialize discriminator parameter when training discriminator
         discr_real_prob, logits_real, feature_real = self._discriminator(self.real_imgs,
-                                                                                 self.train_phase,
-                                                                                 scope_name="discriminator",
-                                                                                 reuse=False)
+                                                                         self.train_phase,
+                                                                         scope_name="discriminator",
+                                                                         reuse=False)
         
         # reuse discriminator parameter when training generator
         discr_fake_prob, logits_fake, feature_fake = self._discriminator(self.gen_images,
-                                                                                 self.train_phase,
-                                                                                 scope_name="discriminator",
-                                                                                 reuse=True)
+                                                                         self.train_phase,
+                                                                         scope_name="discriminator",
+                                                                         reuse=True)
 
         self._discriminator_loss(logits_real, logits_fake)
         self._generator_loss(logits_fake, feature_fake, feature_real)
@@ -59,7 +59,7 @@ class GAN_model():
         shrink_size = self.pool_size
         with tf.variable_scope(scope_name) as scope:
             # z_fc_layer(name, input, n_neuron, img_size, add_bias, activation, train_phase)
-            # output_shape = (1024, 6, 6)
+            # output_shape = (4, 4, 1024)
             h = ops.z_fc_layer('z', self.z_vec, 
                                shrink_size*shrink_size*1024, 
                                shrink_size, 
@@ -69,7 +69,7 @@ class GAN_model():
             
             shrink_size *= 2
             # transpose_conv_layer(name, input , ksize, output_shape, strides, add_bias, activation, train_phase), 
-            # output_shape = (512, 12, 12)
+            # output_shape = (8, 8, 512)
             h = ops.transpose_conv_layer('conv1', h,
                                          [5 ,5 , 512, 1024], 
                                          [self.batch_size, shrink_size, shrink_size, 512], 
@@ -78,7 +78,7 @@ class GAN_model():
                                          activation=tf.nn.relu, 
                                          train_phase=self.train_phase )
             
-            #output_shape = (256, 24, 24)
+            #output_shape = (16, 16, 256)
             shrink_size *= 2
             h = ops.transpose_conv_layer('conv2', h, 
                                          [5 ,5 , 256, 512], 
@@ -88,7 +88,7 @@ class GAN_model():
                                          activation=tf.nn.relu, 
                                          train_phase=self.train_phase)
             
-            #output_shape = (128, 48, 48)
+            #output_shape = (32, 32, 128)
             shrink_size *= 2
             h = ops.transpose_conv_layer('conv3', h, 
                                          [5 ,5 , 128, 256], 
@@ -98,7 +98,7 @@ class GAN_model():
                                          activation=tf.nn.relu, 
                                          train_phase=self.train_phase)
             
-            #output_shape = (64, 96, 96)
+            #output_shape = (64, 64, 3)
             shrink_size *= 2
             gen_img = ops.transpose_conv_layer('gen', h, 
                                                [5 ,5 , 3, 128],
@@ -227,158 +227,8 @@ class GAN_model():
         print(images.shape)
         ops.save_imshow_grid(images, img_dir, "generated_%d.png" % self.global_steps, shape)
 
-class WGAN_model(GAN_model):
-    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(96, 96, 3), optimizer_name='RMSProp',
-                       clip_value=(-0.01, 0.01), iter_ratio=5):
-        self.clip_value = clip_value
-        self.iter_ratio = iter_ratio
-        GAN_model.__init__(self, z_dim, batch_size, learning_rate, img_shape) 
-
-    def _generator(self, z, train_phase, scope_name='generator'):
-        shrink_size = self.pool_size
-        with tf.variable_scope(scope_name) as scope:
-            # z_fc_layer(name, input, n_neuron, img_size, add_bias, activation, train_phase)
-            # output_shape = (1024, 6, 6)
-            h = ops.z_fc_layer('z', self.z_vec, 
-                               shrink_size*shrink_size*1024, 
-                               shrink_size, 
-                               add_bias=False, 
-                               activation=tf.nn.relu, 
-                               train_phase=self.train_phase)
-            shrink_size *= 2
-            # transpose_conv_layer(name, input , ksize, output_shape, strides, add_bias, activation, train_phase), 
-            # output_shape = (512, 12, 12)
-            h = ops.transpose_conv_layer('conv1', h,
-                                         [5 ,5 , 512, 1024], 
-                                         [self.batch_size, shrink_size, shrink_size, 512], 
-                                         strides=[1,2,2,1], 
-                                         add_bias=False,
-                                         activation=tf.nn.relu, 
-                                         train_phase=self.train_phase )
-            
-            #output_shape = (256, 24, 24)
-            shrink_size *= 2
-            h = ops.transpose_conv_layer('conv2', h, 
-                                         [5 ,5 , 256, 512], 
-                                         [self.batch_size, shrink_size, shrink_size, 256], 
-                                         strides=[1,2,2,1], 
-                                         add_bias=False,
-                                         activation=tf.nn.relu, 
-                                         train_phase=self.train_phase)
-            
-            #output_shape = (128, 48, 48)
-            shrink_size *= 2
-            h = ops.transpose_conv_layer('conv3', h, 
-                                         [5 ,5 , 128, 256], 
-                                         [self.batch_size, shrink_size, shrink_size, 128],
-                                         strides=[1,2,2,1],
-                                         add_bias=False,
-                                         activation=tf.nn.relu, 
-                                         train_phase=self.train_phase)
-            
-            #output_shape = (64, 96, 96)
-            shrink_size *= 2
-            gen_img = ops.transpose_conv_layer('gen', h, 
-                                               [5 ,5 , 3, 128],
-                                               [self.batch_size, shrink_size, shrink_size, 3],
-                                               strides=[1,2,2,1], 
-                                               add_bias=False,
-                                               activation=tf.nn.tanh, 
-                                               train_phase=self.train_phase)
-            
-        return gen_img
-            
-    def _discriminator(self, input_img, train_phase, scope_name='discriminator', reuse=False):
-        
-        with tf.variable_scope(scope_name) as scope:
-            if reuse:
-                scope.reuse_variables()
-            
-            #       conv_layer(name, input , ksize, strides, do_bn, activation, train_phase)
-            h = ops.conv_layer('conv1', input_img, 
-                               [5, 5, 3,64], 
-                               strides=[1,2,2,1], 
-                               add_bias=False,
-                               do_bn=False, 
-                               activation=ops.leaky_relu, 
-                               train_phase=self.train_phase)
-                               
-            h = ops.conv_layer('conv2', h, 
-                               [5, 5, 64, 128], 
-                               strides=[1,2,2,1], 
-                               add_bias=False,
-                               do_bn=True, 
-                               activation=ops.leaky_relu, 
-                               train_phase=self.train_phase)
-
-            h = ops.conv_layer('conv3', h, 
-                               [5, 5, 128, 256], 
-                               strides=[1,2,2,1], 
-                               add_bias=False, 
-                               do_bn=True,
-                               activation=ops.leaky_relu, 
-                               train_phase=self.train_phase)
-
-            h = ops.conv_layer('conv4', h, 
-                               [5, 5, 256, 512], 
-                               [1,2,2,1], 
-                               add_bias=False,
-                               do_bn=True,
-                               activation=ops.leaky_relu, 
-                               train_phase=self.train_phase)
-            
-            flatten = tf.reshape(h, [self.batch_size, -1])
-            
-            #            rf_fc_layer(name, input, n_neuron)
-            h_pred = ops.rf_fc_layer('discr', flatten, 1, add_bias=False)
-
-        return None, h_pred, None
-         
-         
-    def _discriminator_loss(self, logits_real, logits_fake):
-        self.discriminator_loss = tf.reduce_mean(logits_fake-logits_real)
-        
-    
-    def _generator_loss(self, logits_fake, feature_fake, feature_real):
-        self.generator_loss = tf.reduce_mean(-logits_fake)
-        
-    def train_model(self, dataLoader, max_epoch):
-        self.global_steps = 0
-        clip_discriminator_var_op = [var.assign(tf.clip_by_value(var, self.clip_value[0], self.clip_value[1])) for
-                                         var in self.discriminator_variables]
-
-        for i in range(max_epoch):
-            dataLoader.shuffle() 
-            batch_gen = dataLoader.batch_generator(batch_size=self.batch_size)
-
-            for batch_imgs in batch_gen:
-                batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
-                feed_dict = {self.z_vec: batch_z, self.real_imgs: batch_imgs, self.train_phase: True}
-                
-                if self.global_steps < 25 or self.global_steps % 500 == 0:
-                    iteration = 25
-                else:
-                    iteration = self.iter_ratio
-
-                for it_r in range(iteration):
-                    self.sess.run(self.discriminator_train_op, feed_dict=feed_dict)
-                    self.sess.run(clip_discriminator_var_op)
-                    
-                self.sess.run(self.generator_train_op, feed_dict=feed_dict)
-    
-                if self.global_steps % 20 == 0 and self.global_steps != 0:
-                    g_loss_val, d_loss_val = self.sess.run(
-                        [self.generator_loss, self.discriminator_loss], feed_dict=feed_dict)
-                    print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g" % (i, self.global_steps, g_loss_val, d_loss_val))
-                    
-                self.global_steps += 1
-            
-            if i % 4 == 0 and i != 0:
-                self.saver.save(self.sess, "model/wmodel_%d.ckpt" % self.global_steps, global_step=self.global_steps)
-                self._visualize_model('wresult')    
-
 class WGAN_model2(GAN_model):
-    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(96, 96, 3), optimizer_name='RMSProp',
+    def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(64, 64, 3), optimizer_name='RMSProp',
                        clip_value=(-0.01, 0.01), iter_ratio=5):
         self.clip_value = clip_value
         self.iter_ratio = iter_ratio
@@ -497,34 +347,42 @@ class WGAN_model2(GAN_model):
     def _generator_loss(self, logits_fake, feature_fake, feature_real):
         self.generator_loss = tf.reduce_mean(-logits_fake)
         
-    def train_model(self, dataLoader, max_epoch):
+    def train_model(self, dataLoader, max_iteration):
         self.global_steps = 0
+        self.epoch = 0
 
-        for i in range(max_epoch):
-            dataLoader.shuffle() 
-            batch_gen = dataLoader.batch_generator(batch_size=self.batch_size)
+        def next_feed_dict(loader, batch_size):
+            while True:
+                loader.shuffle()
+                batch_gen = loader.batch_generator(batch_size=batch_size)
+                self.epoch += 1
+                for batch_imgs in batch_gen:
+                    batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
+                    feed_dict = {self.z_vec: batch_z, self.real_imgs: batch_imgs, self.train_phase: True}
 
-            for batch_imgs in batch_gen:
-                batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
-                feed_dict = {self.z_vec: batch_z, self.real_imgs: batch_imgs, self.train_phase: True}
-                
-                if self.global_steps < 25 or self.global_steps % 500 == 0:
-                    iteration = 40
-                else:
-                    iteration = self.iter_ratio
-
-                for it_r in range(iteration):
-                    self.sess.run(self.discriminator_train_op, feed_dict=feed_dict)
-                    
-                self.sess.run(self.generator_train_op, feed_dict=feed_dict)
-    
-                if self.global_steps % 20 == 0 and self.global_steps != 0:
-                    g_loss_val, d_loss_val = self.sess.run(
-                        [self.generator_loss, self.discriminator_loss], feed_dict=feed_dict)
-                    print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g" % (i, self.global_steps, g_loss_val, d_loss_val))
-                    
-                self.global_steps += 1
+                    yield feed_dict
+        
+        gen = next_feed_dict(dataLoader, self.batch_size)
+        
+        for i in range(max_iteration):
             
-            if i % 4 == 0 and i != 0:
+            if self.global_steps < 25 or self.global_steps % 500 == 0:
+                iteration = 40
+            else:
+                iteration = self.iter_ratio
+
+            for it_r in range(iteration):
+                self.sess.run(self.discriminator_train_op, feed_dict=next(gen))
+                
+            self.sess.run(self.generator_train_op, feed_dict=next(gen))
+    
+            if self.global_steps % 20 == 0 and self.global_steps != 0:
+                g_loss_val, d_loss_val = self.sess.run(
+                    [self.generator_loss, self.discriminator_loss], feed_dict=next(gen))
+                print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g" % (i, self.global_steps, g_loss_val, d_loss_val))
+                
+            self.global_steps += 1
+        
+            if i % 600 == 0 and i != 0:
                 self.saver.save(self.sess, "model/wmodel_%d.ckpt" % self.global_steps, global_step=self.global_steps)
                 self._visualize_model('wresult')            
