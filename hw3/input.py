@@ -61,5 +61,5 @@ class DataLoader:
     
     def _load_image(self, imgpath):
         im = Image.open(imgpath)
-        return (np.asarray(im, dtype=np.float32) - 127.5) / 127.5.
+        return (np.asarray(im, dtype=np.float32) - 127.5) / 127.5
     

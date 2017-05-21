@@ -1,7 +1,7 @@
 import numpy as np
 import random
-import cv2
 import os
+from PIL import Image
 from os import path
 import json
 import queue
@@ -73,9 +73,9 @@ class DataLoader:
             yield imgs, correct_tags, wrong_tags
     
     def _load_image(self, imgpath, ids):
-        im = cv2.imread(imgpath)
-        resize_im = cv2.resize(im, (64,64), interpolation=cv2.INTER_CUBIC)
-        norm_im = (resize_im.astype(np.float32) - 127.5) / 127.5
+        im = Image.open(imgpath)
+        resize_im = im.resize((64, 64), Image.BILINEAR)
+        norm_im =  (np.asarray(resize_im, dtype=np.float32) - 127.5) / 127.5
 
         eyes_onehot = np.zeros(self.n_eye_types, dtype=np.float32)
         hair_onehot = np.zeros(self.n_hair_types, dtype=np.float32)
