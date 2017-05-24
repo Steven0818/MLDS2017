@@ -61,10 +61,12 @@ class ACWGAN_model(GAN_model):
         h_r_loss = self._classifier_loss(logit_hair_real, self.hair_vec)
         h_g_loss = self._classifier_loss(logit_hair_gene, self.hair_vec)
 
-        self.eyes_loss = (e_r_loss + e_g_loss) / 2.
+        self.eyes_loss = e_r_loss
         self.eyes_gen_loss = e_g_loss
-        self.hair_loss = (h_r_loss + h_g_loss) / 2.
+        self.hair_loss = h_r_loss
         self.hair_gen_loss = h_g_loss
+        tf.summary.scalar(['eyes_real_loss', 'eyes_gen_loss', 'hair_real_loss', 'hair_gen_loss'],
+                           [self.eyes_loss, self.eyes_gen_loss, self.hair_loss, self.hair_gen_loss])
 
         self.generator_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='generator')
         self.discriminator_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
@@ -110,7 +112,9 @@ class ACWGAN_model(GAN_model):
                                                                                 else tf.train.RMSPropOptimizer, 
                                                               variables=self.hair_variables, 
                                                               global_step=counter_h)
-        
+
+        self.summary_cd = tf.summary.merge(['eyes_real_loss', 'hair_real_loss'])
+
         self.eyes_gen_train_op = tf.contrib.layers.optimize_loss(loss=self.eyes_gen_loss, learning_rate=self.learning_rate,
                                                               optimizer=partial(tf.train.AdamOptimizer, beta1=0.5, beta2=0.9) 
                                                                                 if self.optimizer_name == 'Adam' 
@@ -125,13 +129,14 @@ class ACWGAN_model(GAN_model):
                                                               variables=self.generator_variables, 
                                                               global_step=counter_gen_h)                                                     
 
-
+        self.summary_cg = tf.summary.merge(['eyes_gen_loss', 'hair_gen_loss'])
 
 
         clipped_var_c = [tf.assign(var, tf.clip_by_value(var, self.clip_value[0], self.clip_value[1])) for var in self.discriminator_variables]
         # merge the clip operations on critic variables
         with tf.control_dependencies([self.discriminator_train_op]):
             self.discriminator_train_op = tf.tuple(clipped_var_c)
+
 
     def _generator(self, z, eyes, hair, train_phase, scope_name='generator'):
         shrink_size = self.pool_size
@@ -206,7 +211,9 @@ class ACWGAN_model(GAN_model):
             img = tf.reshape(img, [self.batch_size, -1])
 
             eyes_logits = tf.contrib.layers.fully_connected(img, self.eyes_dim, activation_fn=None)
-        return eyes_logits
+            dropout_output = tf.cond(train_phase, lambda: tf.nn.dropout(
+                eyes_logits, 0.5), lambda: eyes_logits)
+        return dropout_output
 
     def _hair_classifier(self, input_img, train_phase, scope_name='eyes_classifier', reuse=False):
         
@@ -225,13 +232,17 @@ class ACWGAN_model(GAN_model):
             img = tf.reshape(img, [self.batch_size, -1])
 
             hair_logits = tf.contrib.layers.fully_connected(img, self.hair_dim, activation_fn=None)
-        return hair_logits
+            dropout_output = tf.cond(train_phase, lambda: tf.nn.dropout(
+                hair_logits, 0.5), lambda: hair_logits)
+        return dropout_output
          
     def _discriminator_loss(self, logits_real, logits_fake):
         self.discriminator_loss = tf.reduce_mean(logits_fake - logits_real)
+        self.summary_d = tf.summary.scalar('discriminator_loss', self.discriminator_loss)
     
     def _generator_loss(self, logits_fake, feature_fake, feature_real):
         self.generator_loss = tf.reduce_mean(-logits_fake)
+        self.summary_g = tf.summary.scalar('generator_loss', self.generator_loss)
         
     def _classifier_loss(self, logits, label):
         return tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=label))
@@ -246,11 +257,12 @@ class ACWGAN_model(GAN_model):
                 batch_gen = loader.batch_generator(batch_size=batch_size)
                 self.epoch += 1
                 for batch_imgs, correct_tag, wrong_tag in batch_gen:
-                    batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
+                    batch_z = np.random.uniform(
+                        -1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
                     feed_dict = {self.z_vec: batch_z,
-                                 self.eyes_vec: correct_tag[:,:11], 
-                                 self.hair_vec: correct_tag[:,11:], 
-                                 self.real_imgs: batch_imgs, 
+                                 self.eyes_vec: correct_tag[:, :11],
+                                 self.hair_vec: correct_tag[:, 11:],
+                                 self.real_imgs: batch_imgs,
                                  self.train_phase: True}
                     yield feed_dict
 
@@ -258,30 +270,45 @@ class ACWGAN_model(GAN_model):
 
         for i in range(max_iteration):
             if self.global_steps < 25 or self.global_steps % 500 == 0:
-                iteration = 100
+                iteration = 40
             else:
                 iteration = self.iter_ratio
             for it_r in range(iteration):
-                self.sess.run(self.discriminator_train_op, feed_dict=next(gen))
+                _, summary_d = self.sess.run([self.discriminator_train_op, self.summary_d], feed_dict=next(gen))
+                self.summary_writer.add_summary(summary_d, self.global_steps)
+            _, summary_g = self.sess.run([self.generator_train_op, self.summary_g], feed_dict=next(gen))
+            self.summary_writer.add_summary(summary_g, self.global_steps)
 
-            self.sess.run(self.generator_train_op, feed_dict=next(gen))
+            if i > 3000:
+                _, _, summary_cd = self.sess.run(
+                    [self.eyes_train_op, self.hair_train_op, self.summary_cd], feed_dict=next(gen))
+                self.summary_writer.add_summary(summary_cd, self.global_steps)
 
-            self.sess.run(self.eyes_gen_train_op, feed_dict=next(gen))
-            self.sess.run(self.hair_gen_train_op, feed_dict=next(gen))
-            self.sess.run(self.eyes_train_op, feed_dict=next(gen))
-            self.sess.run(self.hair_train_op, feed_dict=next(gen))
-            
+            if i > 3500:
+                _, _, summary_cg = self.sess.run(
+                    [self.eyes_gen_train_op, self.hair_gen_train_op, self.summary_cg], feed_dict=next(gen))
+                self.summary_writer.add_summary(summary_cg, self.global_steps)
+
             if self.global_steps % 20 == 0 and self.global_steps != 0:
-                g_loss_val, d_loss_val, e_loss_val, h_loss_val = self.sess.run(
-                    [self.generator_loss, self.discriminator_loss, self.eyes_loss, self.hair_loss], feed_dict=next(gen))
-                print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g, eyes_loss: %g, hair_loss: %g" 
-                                % (i, self.global_steps, g_loss_val, d_loss_val, e_loss_val, h_loss_val))
-                            
-                self.global_steps += 1  
-            
+                if i > 3000:
+                    g_loss_val, d_loss_val, e_loss_val, h_loss_val, e_g_loss_val, h_g_loss_val = self.sess.run(
+                        [self.generator_loss, self.discriminator_loss, self.eyes_loss, self.hair_loss, self.eyes_gen_loss, self.hair_gen_loss], feed_dict=next(gen))
+                    print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g, eyes_loss: %g, hair_loss: %g, eyes_gen_loss: %g, hair_gen_loss: %g"
+                          % (i, self.global_steps, g_loss_val, d_loss_val, e_loss_val, h_loss_val, e_g_loss_val, h_g_loss_val))
+
+                else:
+                    g_loss_val, d_loss_val = self.sess.run(
+                        [self.generator_loss, self.discriminator_loss], feed_dict=next(gen))
+                    print("Epoch %d, Step: %d, generator loss: %g, discriminator_loss: %g"
+                          % (i, self.global_steps, g_loss_val, d_loss_val))
+                self.summary_writer.flush()
+
+            self.global_steps += 1
+
             if i % 1000 == 0 and i != 0:
-                self.saver.save(self.sess, "acwmodel/acwmodel_%d.ckpt" % self.global_steps, global_step=self.global_steps)
-                self._visualize_model('acwresult')            
+                self.saver.save(self.sess, "acwmodel/acwmodel_%d.ckpt" %
+                                self.global_steps, global_step=self.global_steps)
+                self._visualize_model('acwresult')
         
     def _visualize_model(self, img_dir):
         print("Sampling images from model...")
@@ -298,5 +325,4 @@ class ACWGAN_model(GAN_model):
         
         print(images.shape)
         ops.save_imshow_grid(images, img_dir, "generated_%d.png" % self.global_steps, shape)
-
 

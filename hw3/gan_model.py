@@ -188,6 +188,7 @@ class GAN_model():
         self.saver = tf.train.Saver()
 
         self.sess.run(tf.global_variables_initializer())
+        self.summary_writer = tf.summary.FileWriter('./summary')
         
     def train_model(self, dataLoader, max_epoch):
         self.global_steps = 0

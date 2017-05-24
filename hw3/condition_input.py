@@ -9,11 +9,11 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 class DataLoader:
-    def __init__(self, img_dir, img_shape, caption_json, n_eye_types=11, n_hair_types=11):
+    def __init__(self, img_dir, img_shape, feature_path, w_feature_path, index_order_path, n_eye_types=11, n_hair_types=11):
         self.file_ids, self.filepaths = self._get_img_path(img_dir)
         self.n_data = len(self.filepaths)
         self.img_shape = img_shape
-        self.id2cap_dict = self._load_caption(caption_json)
+        self.load_embedding_feature(feature_path, w_feature_path, index_order_path)
         self.n_eye_types = n_eye_types
         self.n_hair_types = n_hair_types
 
@@ -30,6 +30,11 @@ class DataLoader:
             tags_json = json.load(f)
         
         return tags_json
+
+    def load_embedding_feature(self, feature, w_feature, index_order):
+        self.order = json.load(open(index_order))
+        self.feature = np.load(feature)
+        self.w_feature = np.load(w_feature)
 
     def shuffle(self):
         z = list(zip(self.filepaths, self.file_ids))
@@ -76,37 +81,6 @@ class DataLoader:
         im = cv2.imread(imgpath)
         resize_im = cv2.resize(im, (64,64), interpolation=cv2.INTER_CUBIC)
         norm_im = (resize_im.astype(np.float32) - 127.5) / 127.5
-
-        eyes_onehot = np.zeros(self.n_eye_types, dtype=np.float32)
-        hair_onehot = np.zeros(self.n_hair_types, dtype=np.float32)
-
-        wrong_eyes_onehot = np.zeros(self.n_eye_types, dtype=np.float32)
-        wrong_hair_onehot = np.zeros(self.n_hair_types, dtype=np.float32)
-
-        eyes_idx_list = self.id2cap_dict[ids]['eyes']
-        for idx in eyes_idx_list:
-            eyes_onehot[idx] = 1.
-            
-            wrong_idx = idx
-            while True:
-                wrong_idx = wrong_idx + 1 if wrong_idx + 1 < self.n_eye_types else 0
-                if not wrong_idx in eyes_idx_list:
-                    break
-            wrong_eyes_onehot[wrong_idx] = 1.
-        
-        hair_idx_list = self.id2cap_dict[ids]['hair']
-        for idx in hair_idx_list:
-            hair_onehot[idx] = 1.
-            
-            wrong_idx = idx
-            while True:
-                wrong_idx = wrong_idx + 1 if wrong_idx + 1 < self.n_hair_types else 0
-                if (not wrong_idx in hair_idx_list) or wrong_idx == idx:
-                    break
-            wrong_hair_onehot[wrong_idx] = 1.
-
-        correct_vec = np.concatenate((eyes_onehot, hair_onehot))
-        wrong_vec = np.concatenate((wrong_eyes_onehot, wrong_hair_onehot))
-
-        return (norm_im, correct_vec, wrong_vec)
+        order = self.order[str(ids)]
+        return (norm_im, self.feature[order], self.w_feature[order])
     
