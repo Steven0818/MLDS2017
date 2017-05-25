@@ -90,5 +90,5 @@ def save_imshow_grid(images, result_dir, filename, grid_shape):
 def save_test_image(images, index, result_dir='samples'):
 
     for order, image in enumerate(images):
-        filename = 'sample_{0}_{1}.jpg'.format(index, order)
+        filename = 'sample_{0}_{1}.jpg'.format(index+1, order+1)
         cv2.imwrite(os.path.join(result_dir, filename), image)

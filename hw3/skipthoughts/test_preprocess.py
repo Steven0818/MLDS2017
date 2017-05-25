@@ -4,7 +4,7 @@ require skip-thoughts
 """
 import sys
 import re
-import skipthoughts.skipthoughts
+from skipthoughts import load_model, Encoder
 import numpy as np
 
 
@@ -13,8 +13,8 @@ def main():
         features = f.readlines()
     features = [re.match('[0-9]*,(.*)', x).groups()[0] for x in features]
     print(features)
-    model = skipthoughts.load_model()
-    encoder = skipthoughts.Encoder(model)
+    model = load_model()
+    encoder = Encoder(model)
     ret = encoder.encode(features)
     np.save('features.npy', ret)
 

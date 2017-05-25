@@ -11,7 +11,7 @@ def main():
     model = conditional_GAN_model(batch_size=5)
     model.create_computing_graph()
     model.initialize_network()
-    model.load_model('./cmodel/cmodel_46001.ckpt-46001')
+    model.load_model('./cmodel_10501.ckpt-10501')
     
     tag_input = np.load('features.npy')
     for i, feature in enumerate(tag_input):
