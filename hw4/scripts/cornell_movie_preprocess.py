@@ -78,6 +78,13 @@ class Main():
         with open(outpath, 'w') as f:
             json.dump(_dict, f)
 
+    def create_conv_dict(self, output='convdict.json'):
+        convs = self._load_conversations()
+        fpath = os.path.join(self.data_dir, output)
+        with open(fpath, 'w') as f:
+            json.dump(convs, f)
+
+
     def __call__(self):
         pass
 
