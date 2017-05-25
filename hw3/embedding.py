@@ -23,8 +23,8 @@ def main(file_path='tags.json'):
             f_str += eyes_color_list[eyes] + ' ' + 'eyes '
         for hair in data['hair']:
             f_str += hair_color_list[hair] + ' ' + 'hair '
-        w_str += random.choice([x for i, x in enumerate(eyes_color_list) if i not in data['eyes']]) + ' ' + 'eyes '
         w_str += random.choice([x for i, x in enumerate(hair_color_list) if i not in data['hair']]) + ' ' + 'hair '
+        w_str += random.choice([x for i, x in enumerate(eyes_color_list) if i not in data['eyes']]) + ' ' + 'eyes '
         return f_str, w_str
 
     tag = json.load(open(file_path))
