@@ -53,10 +53,10 @@ class WordDict(abc.MutableMapping):
         self.mapping[key] = value
         self.inv_mapping[value] = key
 
-    def tocsv(self, path, delimeter=' '):
+    def tocsv(self, path, delimiter=' '):
         import csv
         with open(path, 'w', errors='ignore', newline='') as f:
-            writer = csv.writer(f, delimeter=delimeter)
+            writer = csv.writer(f, delimiter=delimiter)
             for k, v in self.mapping.items():
                 writer.writerow((k, v))
 
@@ -77,10 +77,10 @@ class WordDict(abc.MutableMapping):
         return cls(_dict)
 
     @classmethod
-    def fromcsv(cls, path, delimeter=' '):
+    def fromcsv(cls, path, delimiter=' '):
         import csv
         with open(path, errors='ignore', newline='') as f:
-            reader = csv.reader(f, delimeter=delimeter)
+            reader = csv.reader(f, delimiter=delimiter)
             _dict = {a: int(b) for a, b, *_ in reader}
             return cls(_dict)
 
