@@ -1,13 +1,13 @@
 # Scripts Usage
 
-Every dataset will have a conresponding `{name}_preprocess.py`. Each script
+Every dataset will have a corresponding `{name}_preprocess.py`. Each script
 will use `fire` as argument parser. The command-line options will be almost the
-same for every dataset.
+same for these scripts.
 
 To manually execute preprocessing procedure, one should first generate
-`wordconut.json` for each dataset using the scripts. The `wordcount.json` file
-records word frequency. After generating these files, call
-`aggregate_worddict.py` to generate the final word dictionary 'worddict.txt', which can
+`wordconut.json` for each dataset using the preprocessing script. The `wordcount.json`
+file records word frequency. After generating these files, call
+`aggregate_worddict.py` to generate the final word dictionary `worddict.txt`, which can
 later be loaded using `worddict.py` in the code base. Then, use the word dictionary
 file to generate `linedict.json` for each dataset and use the same script to
 generate `convdict.json`. Finally, call `aggregate_conv.py` to generate the
@@ -22,7 +22,7 @@ corresponding `{name}_preprocess.py` in the script folder. As for how to create
 your own preprocessing script, copy the existing `{name}_preprocess.py` and
 start hacking.
 
-Finally, the core preprocess logic for every line is written in `preprocess.py`
+Finally, the core preprocess logic for each line is written in `preprocess.py`
 If there is any change in the preprocessing scripts, re-run `bootstrap.py` to
 overwrite the old files.
 
@@ -30,7 +30,7 @@ overwrite the old files.
 
 ## worddict.txt
 
-Each line contains target word and corresponding int mapping. It's recommended
+Each line contains the target word and corresponding int mapping. It's recommended
 to use `WordDict.fromcsv` to load this file. See `worddict.py` for example usage.
 
 ## linedict.txt
