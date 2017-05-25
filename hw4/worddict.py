@@ -5,6 +5,19 @@ It support importing/exporting from various format and maintain both
 word-to-index and index-to-word mappings. Besides mimicking a build-in dict,
 it has `batch_get` method and `batch_get_inv` method for frequently usage in
 the NLP field.
+
+>>> from worddict import WordDict
+>>> wd = WordDict.fromcsv('./data/worddict.txt')
+
+>>> wd['they']
+50
+
+>>> wd.batch_get_inv([2, 50, 23, 32, 14, 3])
+['<bos>', 'they', 'do', 'not', '!', '<eos>']
+
+>>> wd.batch_get(['<bos>', 'they', 'do', 'not', '!', '<eos>'])
+[2, 50, 23, 32, 14, 3]
+
 """
 
 from collections import abc

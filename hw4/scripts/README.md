@@ -16,7 +16,15 @@ have the same word dictionary for all the datasets.
 
 We provide `bootstrap.py` for the above routine. After running this script,
 `worddict.txt`, `linedict.txt`, and `convdict.txt` will be generated under
-`<data-dir>`.
+`<data-dir>`. However, before runnning this script, make sure there is a data
+folder which containing dataset folders, and each dataset folder should have a
+corresponding `{name}_preprocess.py` in the script folder. As for how to create
+your own preprocessing script, copy the existing `{name}_preprocess.py` and
+start hacking.
+
+Finally, the core preprocess logic for every line is written in `preprocess.py`
+If there is any change in the preprocessing scripts, re-run `bootstrap.py` to
+overwrite the old files.
 
 # File Formats
 
