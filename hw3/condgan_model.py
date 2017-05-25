@@ -629,3 +629,13 @@ class conditional_WGANGP_model(GAN_model):
         
         print(images.shape)
         ops.save_imshow_grid(images, img_dir, "generated_%d.png" % self.global_steps, shape)
+
+    def save_test_img(self, feature, index):
+        batch_z = np.random.uniform(-1.0, 1.0, size=[self.batch_size, self.z_dim]).astype(np.float32)
+        correct_tag = np.tile(correct_tag, (self.batch_size, 1))
+
+        feed_dict = {self.z_vec: batch_z, self.tag_vec: correct_tag, self.train_phase: False}
+        images = self.sess.run(self.gen_images, feed_dict=feed_dict)
+        images = ops.unprocess_image(images, 127.5, 127.5).astype(np.uint8)
+
+        ops.save_test_image(images, index)
