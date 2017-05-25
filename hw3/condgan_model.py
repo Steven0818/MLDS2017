@@ -6,7 +6,7 @@ from gan_model import GAN_model
 
 class conditional_WGAN_model(GAN_model):
     def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(64, 64, 3), optimizer_name='RMSProp',
-                       tag_dim = 22, tag_embed_dim = 50, clip_value=(-0.01, 0.01), iter_ratio=5):
+                       tag_dim = 22, tag_embed_dim = 100, clip_value=(-0.01, 0.01), iter_ratio=5):
         self.clip_value = clip_value
         self.iter_ratio = iter_ratio
         self.tag_dim = tag_dim
@@ -214,7 +214,7 @@ class conditional_WGAN_model(GAN_model):
 
 class conditional_GAN_model(GAN_model):
     def __init__(self, z_dim=100, batch_size=100, learning_rate=0.0002, img_shape=(64, 64, 3), optimizer_name='Adam',
-                       tag_dim = 4800, tag_embed_dim = 256, test_feature = 'test1.npy'):
+                       tag_dim = 4800, tag_embed_dim = 100, test_feature = 'test2.npy'):
         self.tag_dim = tag_dim
         self.tag_embed_dim = tag_embed_dim
         self.test_feature = np.repeat(np.load(test_feature), batch_size, axis=0)
@@ -234,6 +234,7 @@ class conditional_GAN_model(GAN_model):
         self.gen_images = self._generator(self.z_vec, self.tag_vec, self.train_phase, scope_name='generator')
         process_image = self.gen_images*127.5 + 127.5
         self.summary_image = tf.summary.image('gen_images', process_image, max_outputs=20)
+        self.summary_image_test = tf.summary.image('test_gen_images', process_image, max_outputs=20)
         logits_real = self._discriminator(self.real_imgs,
                                           self.tag_vec,
                                           self.train_phase,
@@ -252,15 +253,15 @@ class conditional_GAN_model(GAN_model):
                                           scope_name="discriminator",
                                           reuse=True)
 
+        counter_g = tf.Variable(trainable=False, initial_value=0, dtype=tf.int32)
+        counter_d = tf.Variable(trainable=False, initial_value=0, dtype=tf.int32)
+
         self._discriminator_loss(logits_real, logits_fake, logits_wtag)
         self._generator_loss(logits_fake)
-
-        
+     
         self.generator_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='generator')
         self.discriminator_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='discriminator')
         
-        counter_g = tf.Variable(trainable=False, initial_value=0, dtype=tf.int32)
-        counter_d = tf.Variable(trainable=False, initial_value=0, dtype=tf.int32)
 
         if self.optimizer_name == 'Adam':
             optimizer = tf.train.AdamOptimizer(self.learning_rate, beta1=0.5, beta2=0.9)
@@ -425,7 +426,8 @@ class conditional_GAN_model(GAN_model):
 
         feed_dict = {self.z_vec: batch_z, self.tag_vec: self.test_feature, self.train_phase: False}
 
-        images = self.sess.run(self.gen_images, feed_dict=feed_dict)
+        images, summary_img = self.sess.run([self.gen_images, self.summary_image_test], feed_dict=feed_dict)
+        self.summary_writer.add_summary(summary_img, self.global_steps)
         images = ops.unprocess_image(images, 127.5, 127.5).astype(np.uint8)
         shape = [4, self.batch_size // 4]
 
