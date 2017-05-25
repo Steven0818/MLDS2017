@@ -1,7 +1,7 @@
 # Scripts Usage
 
 Every dataset will have a conresponding `{name}_preprocess.py`. Each script
-will use `fire` as argument parser. The commandline options will be almost the
+will use `fire` as argument parser. The command-line options will be almost the
 same for every dataset.
 
 To manually execute preprocessing procedure, one should first generate
@@ -31,7 +31,7 @@ overwrite the old files.
 ## worddict.txt
 
 Each line contains target word and corresponding int mapping. It's recommended
-to use `WordDict.fromcsv` to load this file.
+to use `WordDict.fromcsv` to load this file. See `worddict.py` for example usage.
 
 ## linedict.txt
 Each line is of the following format:
@@ -61,6 +61,6 @@ It can be easily loaded using the following code:
 
 ```python
 convs = []
-with open('linedict.txt') as f:
+with open('convdict.txt') as f:
     convs.append(line.split() for line in f)
 ```
