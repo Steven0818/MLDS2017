@@ -1,4 +1,3 @@
-import re
 import os
 import sys
 import ast
@@ -6,23 +5,12 @@ import json
 from collections import Counter
 import fire
 from tqdm import tqdm
+from preprocess import line_preprocess
 
 PROJECT_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(PROJECT_DIR)
 # pylint: disable=C0413
 from worddict import WordDict   # pylint: disable=E0401
-
-REPLACE_CHAR = r'[-\"_:\+\-()\[\]<>\\]|(\.){2,}'
-PREPEND_SPACE = r'(\!|\?|\.|\,)'
-
-def preprocess(s):
-    ret = re.sub(r'\' | \'|^\'| \'$', ' ', s)
-    # ret = re.sub(r'(?<=(\.| ))\'', '', ret)
-    ret = re.sub(REPLACE_CHAR, '', ret)
-    ret = re.sub(PREPEND_SPACE, r' \1', ret)
-    ret = '<bos> ' + ret.lower() + ' <eos>'
-    return ' '.join(ret.split())
-
 
 class Main():
     def __init__(self, data_dir):
@@ -37,7 +25,7 @@ class Main():
             if not index.startswith('L'):
                 raise ValueError('Line not starts with "L": {}' % index)
 
-            line_dict[int(index[1:])] = preprocess(content)
+            line_dict[int(index[1:])] = line_preprocess(content)
         return line_dict
 
     def _load_conversations(self):
@@ -66,12 +54,11 @@ class Main():
         with open(fpath, 'w') as f:
             json.dump(_dict, f)
 
-    def create_line_dict(self, worddict='worddict.json', output='linedict.json'):
+    def create_line_dict(self, worddict='worddict.txt', output='linedict.json'):
         lines = self._load_lines()
 
-        inpath = os.path.join(self.data_dir, worddict)
         outpath = os.path.join(self.data_dir, output)
-        indict = WordDict.fromjson(inpath)
+        indict = WordDict.fromcsv(worddict)
 
         _dict = {i: indict.batch_get(line.split()) for i, line in lines.items()}
 
