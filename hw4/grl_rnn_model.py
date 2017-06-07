@@ -125,16 +125,17 @@ class grl_model(object):
                                                                buckets=self.buckets,
                                                                seq2seq=lambda x, y: seq2seq_f(x, y, tf.where(self.forward_only, True, False)),
                                                                softmax_loss_function=softmax_loss_function)
-        #
-        #     for b in xrange(len(self.buckets)):
-        #         self.outputs[b] = [
-        #             tf.cond(
-        #                 self.forward_only,
-        #                 lambda: tf.matmul(output, output_projection[0]) + output_projection[1],
-        #                 lambda: output
-        #             )
-        #             for output in self.outputs[b]
-        #         ]
+        
+        #self.outputs = tf.squeeze(self.outputs)
+        for b in range(len(self.buckets)):
+                self.outputs[b] = [
+                    tf.cond(
+                        self.forward_only,
+                        lambda: tf.matmul(output, output_projection[0]) + output_projection[1],
+                        lambda: output
+                    )
+                    for output in self.outputs[b]
+                ]
 
             # if not beam_search:
             #     self.outputs, self.losses, self.encoder_states = rl_seq2seq.model_with_buckets(self.encoder_inputs,
@@ -236,7 +237,7 @@ class grl_model(object):
                 if (len(resp) <= 3) or (resp in self.dummy_dialogs) or (resp in ep_encoder.tolist()):
                     batch_mask[i] = 0
                     print("make mask index: %d, batch_mask: %s" % (i, batch_mask))
-            if sum(batch_mask) == 0 or episode > 9:
+            if sum(batch_mask) == 0 or episode > 3:
                 break
 
             # ----[Reward]----------------------------------------

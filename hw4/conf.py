@@ -6,7 +6,7 @@ class GSTConfig(object):
     learning_rate = 0.5
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
-    batch_size = 256
+    batch_size = 10
     emb_dim = 1024
     num_layers = 2
     vocab_size = 25000
@@ -25,7 +25,7 @@ class GCCConfig(object):
     learning_rate = 0.5
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
-    batch_size = 128
+    batch_size = 10
     emb_dim = 1024
     num_layers = 2
     vocab_size = 25000
@@ -44,7 +44,7 @@ class GBKConfig(object):
     learning_rate = 0.5
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
-    batch_size = 256
+    batch_size = 10
     emb_dim = 1024
     num_layers = 2
     vocab_size = 25000
@@ -63,7 +63,7 @@ class GRLConfig(object):
     learning_rate = 0.5
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
-    batch_size = 256
+    batch_size = 10
     emb_dim = 1024
     num_layers = 2
     vocab_size = 25000

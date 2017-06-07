@@ -118,7 +118,7 @@ def ce_standard_train(st_config):
         print("Creating %s %d layers of %d units" %(st_config.name_model ,st_config.num_layers, st_config.emb_dim))
         st_model = create_st_model(sess, st_config, False, st_config.name_model)
 
-        train_bucket_sizes = [len(train_set[b]) for b in xrange(len(st_config.buckets))]
+        train_bucket_sizes = [len(train_set[b]) for b in range(len(st_config.buckets))]
         train_total_size = float(sum(train_bucket_sizes))
         train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
                                for i in xrange(len(train_bucket_sizes))]
