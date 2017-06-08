@@ -213,7 +213,7 @@ def sentence_to_token_ids(sentence, vocabulary,
   if not normalize_digits:
     return [vocabulary.get(w, UNK_ID) for w in words]
   # Normalize digits by 0 before looking words up in the vocabulary.
-  return [vocabulary.get(_DIGIT_RE.sub(b"0", w), UNK_ID) for w in words]
+  return [vocabulary.get((_DIGIT_RE.sub(b"0", w)).decode("utf-8"), UNK_ID) for w in words]
 
 
 def data_to_token_ids(data_path, target_path, vocabulary,
