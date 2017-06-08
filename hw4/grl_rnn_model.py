@@ -237,59 +237,37 @@ class grl_model(object):
                 if (len(resp) <= 3) or (resp in self.dummy_dialogs) or (resp in ep_encoder.tolist()):
                     batch_mask[i] = 0
                     print("make mask index: %d, batch_mask: %s" % (i, batch_mask))
-            if sum(batch_mask) == 0 or episode > 3:
+            if sum(batch_mask) == 0 or episode >= 1:
                 break
 
             # ----[Reward]----------------------------------------
             # r1: Ease of answering
-            print (len(enc_states))
-            r1 = [self.logProb(session, st_model, self.buckets, resp_tokens, [d for _ in resp_tokens],
-                               mask=batch_mask) for d in self.dummy_dialogs]
-            print("r1: final value: ", r1)
-            r1 = -np.mean(r1) if r1 else 0
+            # print (len(enc_states))
+            # r1 = [self.logProb(session, st_model, self.buckets, resp_tokens, [d for _ in resp_tokens],
+            #                    mask=batch_mask) for d in self.dummy_dialogs]
+            # print("r1: final value: ", r1)
+            # r1 = -np.mean(r1) if r1 else 0
 
-            # r2: Information Flow
-            r2_list = []
-            if len(enc_states) < 4:
-                r2 = 0
-            else:
-                batch_vec_a, batch_vec_b = enc_states[-3], enc_states[-1]
-                for i, (vec_a, vec_b) in enumerate(zip(batch_vec_a, batch_vec_b)):
-                    if batch_mask[i] == 0: continue
-                    rr2 = sum(vec_a * vec_b) / sum(abs(vec_a) * abs(vec_b))
-                    # print("vec_a*vec_b: %s" %sum(vec_a*vec_b))
-                    # print("r2: %s" %r2)
-                    if (rr2 < 0):
-                        print("rr2: ", rr2)
-                        #print("vec_a: ", vec_a)
-                        #print("vec_b: ", vec_b)
-                        rr2 = -rr2
-                    else:
-                        rr2 = -log(rr2)
-                    r2_list.append(rr2)
-                r2 = sum(r2_list) / len(r2_list)
-
-            # r3: Semantic Coherence
-            print("r3: Semantic Coherence")
-            if len(ep_encoder_inputs) < 4:
-                r3 = 0
-            else:
-                pi = ep_encoder_inputs[-3]
-                qi = ep_encoder_inputs[-2]
-                answer = ep_encoder_inputs[-1]
-                query = np.column_stack((pi, qi))
-                r3_1 = self.logProb(session, cc_model, self.buckets, query, answer, mask=batch_mask)
-                r3_2 = self.logProb(session, bk_model, self.buckets, answer, qi, mask=batch_mask)
-                print("r3_1: ", r3_1)
-                print("r3_2: ", r3_2)
-                r3 = r3_1 + r3_2
-
-            # Episode total reward
-            print("r1: %s, r2: %s, r3: %s" % (r1, r2, r3))
-            R = 0.25 * r1 + 0.25 * r2 + 0.5 * r3
-            ep_rewards.append(R)
-            # ----------------------------------------------------
-            episode += 1
+            # # r2: Information Flow
+            # r2_list = []
+            # if len(enc_states) < 4:
+            #     r2 = 0
+            # else:
+            #     batch_vec_a, batch_vec_b = enc_states[-3], enc_states[-1]
+            #     for i, (vec_a, vec_b) in enumerate(zip(batch_vec_a, batch_vec_b)):
+            #         if batch_mask[i] == 0: continue
+            #         rr2 = sum(vec_a * vec_b) / sum(abs(vec_a) * abs(vec_b))
+            #         # print("vec_a*vec_b: %s" %sum(vec_a*vec_b))
+            #         # print("r2: %s" %r2)
+            #         if (rr2 < 0):
+            #             print("rr2: ", rr2)
+            #             #print("vec_a: ", vec_a)
+            #             #print("vec_b: ", vec_b)
+            #             rr2 = -rr2
+            #         else:
+            #             rr2 = -log(rr2)
+            #         r2_list.append(rr2)
+            #     r2 = sum(r2_list) / len(r2_list)
 
             # prepare for next dialogue
             bk_id = []
@@ -299,6 +277,26 @@ class grl_model(object):
             feed_data = {bucket_id: [(resp_tokens, [])]}
             encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, _ = self.get_batch(feed_data,
                                                                                                      bucket_id, type=2)
+            print("r3: Semantic Coherence")
+            # if len(ep_encoder_inputs) < 2:
+            #     r3 = 0
+            # else:
+            #     pi = ep_encoder_inputs[-3]
+            #     qi = ep_encoder_inputs[-2]
+            #     answer = ep_encoder_inputs[-1]
+            #     query = np.column_stack((pi, qi))
+            #     r3_1 = self.logProb(session, cc_model, self.buckets, query, answer, mask=batch_mask)
+            r3_2 = self.logProb(session, bk_model, self.buckets, batch_source_encoder, ep_encoder_inputs[-1], mask=batch_mask)
+            #    print("r3_1: ", r3_1)
+            print("r3_2: ", r3_2)
+            r3 = r3_2 # + r3_1
+
+            # Episode total reward
+            #print("r1: %s, r2: %s, r3: %s" % (r1, r2, r3))
+            R = r3
+            ep_rewards.append(R)
+            # ----------------------------------------------------
+            episode += 1
 
         if len(ep_rewards) == 0:
             print("ep_rewards is zero")

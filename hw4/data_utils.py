@@ -106,6 +106,7 @@ def get_wmt_enfr_dev_set(directory):
 def basic_tokenizer(sentence):
   """Very basic tokenizer: split the sentence into a list of tokens."""
   words = []
+  sentence = sentence.lower()
   for space_separated_fragment in sentence.strip().split():
     words.extend(_WORD_SPLIT.split(space_separated_fragment))
   return [w for w in words if w]
@@ -204,7 +205,7 @@ def sentence_to_token_ids(sentence, vocabulary,
   Returns:
     a list of integers, the token-ids for the sentence.
   """
-
+  sentence = tf.compat.as_bytes(sentence)
   if tokenizer:
     words = tokenizer(sentence)
   else:
@@ -267,9 +268,9 @@ def prepare_chitchat_data(data_dir, vocabulary, vocabulary_size, tokenizer=None)
   """
   # Get wmt data to the specified directory.
   #train_path = get_wmt_enfr_train_set(data_dir)
-  train_path = os.path.join(data_dir, "chitchat.train")
+  train_path = os.path.join(data_dir, "movie_subtitle.train")
   #dev_path = get_wmt_enfr_dev_set(data_dir)
-  dev_path = os.path.join(data_dir, "chitchat.dev")
+  #dev_path = os.path.join(data_dir, "movie_subtitle.dev")
   # fixed_path = os.path.join(data_dir, "chitchat.fixed")
   # weibo_path = os.path.join(data_dir, "chitchat.weibo")
   # qa_path = os.path.join(data_dir, "chitchat.qa")
@@ -293,13 +294,12 @@ def prepare_chitchat_data(data_dir, vocabulary, vocabulary_size, tokenizer=None)
   data_to_token_ids(train_path + ".query", query_train_ids_path, vocabulary, tokenizer)
 
   # Create token ids for the development data.
-  answer_dev_ids_path = dev_path + (".ids%d.answer" % vocabulary_size)
-  query_dev_ids_path = dev_path + (".ids%d.query" % vocabulary_size)
-  data_to_token_ids(dev_path + ".answer", answer_dev_ids_path, vocabulary, tokenizer)
-  data_to_token_ids(dev_path + ".query", query_dev_ids_path, vocabulary, tokenizer)
+  # answer_dev_ids_path = dev_path + (".ids%d.answer" % vocabulary_size)
+  # query_dev_ids_path = dev_path + (".ids%d.query" % vocabulary_size)
+  # data_to_token_ids(dev_path + ".answer", answer_dev_ids_path, vocabulary, tokenizer)
+  # data_to_token_ids(dev_path + ".query", query_dev_ids_path, vocabulary, tokenizer)
 
-  return (query_train_ids_path, answer_train_ids_path,
-          query_dev_ids_path, answer_dev_ids_path)
+  return (query_train_ids_path, answer_train_ids_path)
 
 def prepare_defined_data(data_path, vocabulary, vocabulary_size, tokenizer=None):
   #vocab_path = os.path.join(data_dir, "vocab%d.all" %vocabulary_size)

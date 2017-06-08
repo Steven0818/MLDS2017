@@ -7,7 +7,7 @@ class GSTConfig(object):
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
     batch_size = 10
-    emb_dim = 1024
+    emb_dim = 256
     num_layers = 2
     vocab_size = 25000
     train_dir = "./gst_data/"
@@ -26,7 +26,7 @@ class GCCConfig(object):
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
     batch_size = 10
-    emb_dim = 1024
+    emb_dim = 256
     num_layers = 2
     vocab_size = 25000
     train_dir = "./gcc_data/"
@@ -45,7 +45,7 @@ class GBKConfig(object):
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
     batch_size = 10
-    emb_dim = 1024
+    emb_dim = 256
     num_layers = 2
     vocab_size = 25000
     train_dir = "./gbk_data/"
@@ -64,7 +64,7 @@ class GRLConfig(object):
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
     batch_size = 10
-    emb_dim = 1024
+    emb_dim = 256
     num_layers = 2
     vocab_size = 25000
     train_dir = "./grl_data/"
@@ -83,9 +83,9 @@ class Pre_GRLConfig(object):
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
     batch_size = 10
-    emb_dim = 512
+    emb_dim = 256
     num_layers = 2
-    vocab_size = 1000
+    vocab_size = 25000
     train_dir = "./pre_grl_data/"
     name_model = "rl_model"
     tensorboard_dir = "./tensorboard/grl_log/"

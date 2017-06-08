@@ -35,6 +35,9 @@ def read_data(config, source_path, target_path, max_size=None):
                     sys.stdout.flush()
                 source_ids = [int(x) for x in source.strip().split()]
                 target_ids = [int(x) for x in target.strip().split()]
+                # source_ids.insert(0,data_utils._GO)
+                # source_ids.append(data_utils.EOS_ID)
+                # target_ids.append(data_utils._GO))
                 target_ids.append(data_utils.EOS_ID)
                 for bucket_id, (source_size, target_size) in enumerate(config.buckets):
                     if len(source_ids) < source_size and len(target_ids) < target_size:
@@ -45,7 +48,7 @@ def read_data(config, source_path, target_path, max_size=None):
 
 
 def prepare_data(config):
-    train_path = os.path.join(config.train_dir, "chitchat.train")
+    train_path = os.path.join(config.train_dir, "movie_subtitle.train")
     data_path_list = [train_path + ".answer", train_path + ".query"]
     vocab_path = os.path.join(config.train_dir, "vocab%d.all" % config.vocab_size)
     data_utils.create_vocabulary(vocab_path, data_path_list, config.vocab_size)
@@ -60,12 +63,12 @@ def prepare_data(config):
     #     train_set = pickle.load(train_set_file)
     #     train_set_file.close()
     # else:
-    print("Prepare Chitchat data in %s" % config.train_dir)
-    train_query, train_answer, dev_query, dev_answer = data_utils.prepare_chitchat_data(
+    print("Prepare Movie Subtitle data in %s" % config.train_dir)
+    train_query, train_answer = data_utils.prepare_chitchat_data(
         config.train_dir, vocab, config.vocab_size)
 
     print("Reading development and training data (limit: %d)." % config.max_train_data_size)
-    dev_set = read_data(config, dev_query, dev_answer)
+    # dev_set = read_data(config, dev_query, dev_answer)
     train_set = read_data(config, train_query, train_answer)
 
         # dev_set_file = open(config.dev_set, "wb")
@@ -76,7 +79,7 @@ def prepare_data(config):
         # pickle.dump(train_set, train_set_file)
         # train_set_file.close()
 
-    return vocab, rev_vocab, dev_set, train_set
+    return vocab, rev_vocab, train_set
 
 
 def create_st_model(session, st_config, forward_only, name_scope):
@@ -110,7 +113,7 @@ def create_rl_model(session, rl_config, forward_only, name_scope):
 
 
 def ce_standard_train(st_config):
-    vocab, rev_vocab, dev_set, train_set = prepare_data(st_config)
+    vocab, rev_vocab, train_set = prepare_data(st_config)
     for b_set in train_set:
         print("b_set length: ", len(b_set))
 
@@ -121,7 +124,7 @@ def ce_standard_train(st_config):
         train_bucket_sizes = [len(train_set[b]) for b in range(len(st_config.buckets))]
         train_total_size = float(sum(train_bucket_sizes))
         train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
-                               for i in xrange(len(train_bucket_sizes))]
+                               for i in range(len(train_bucket_sizes))]
 
         step_time, loss = 0.0, 0.0
         current_step = 0
@@ -132,8 +135,8 @@ def ce_standard_train(st_config):
 
         while True:
             random_number_01 = np.random.random_sample()
-            bucket_id = min([i for i in xrange(len(train_buckets_scale)) if train_buckets_scale[i] > random_number_01])
-            print("bucket_id: ", bucket_id)
+            bucket_id = min([i for i in range(len(train_buckets_scale)) if train_buckets_scale[i] > random_number_01])
+            #print("bucket_id: ", bucket_id)
             # Get a batch and make a step.
             start_time = time.time()
             encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, batch_source_decoder = \
@@ -144,10 +147,9 @@ def ce_standard_train(st_config):
             step_time += (time.time() - start_time) / st_config.steps_per_checkpoint
             loss += step_loss / st_config.steps_per_checkpoint
             current_step += 1
-
+            
             # Once in a while, we save checkpoint, print statistics, and run evals.
             if current_step % st_config.steps_per_checkpoint == 0:
-
                 bucket_value = step_loss_summary.value.add()
                 bucket_value.tag = st_config.name_loss
                 bucket_value.simple_value = float(loss)
@@ -166,7 +168,7 @@ def ce_standard_train(st_config):
                 gen_ckpt_dir = os.path.abspath(os.path.join(st_config.train_dir, "checkpoints"))
                 if not os.path.exists(gen_ckpt_dir):
                     os.makedirs(gen_ckpt_dir)
-                checkpoint_path = os.path.join(gen_ckpt_dir, "chitchat.model")
+                checkpoint_path = os.path.join(gen_ckpt_dir, "movie_subtitle.model")
                 st_model.saver.save(sess, checkpoint_path, global_step=st_model.global_step)
                 step_time, loss = 0.0, 0.0
                 # Run evals on development set and print their perplexity.
@@ -181,17 +183,17 @@ def ce_standard_train(st_config):
 
 
 def pre_rl_train(rl_config):
-    vocab, rev_vocab, dev_set, train_set = prepare_data(rl_config)
+    vocab, rev_vocab, train_set = prepare_data(rl_config)
     for b_set in train_set:
         print("b_set length: ", len(b_set))
 
     with tf.Session() as sess:
         rl_model = create_rl_model(sess, rl_config=rl_config, forward_only=False, name_scope=rl_config.name_model)
 
-        train_bucket_sizes = [len(train_set[b]) for b in xrange(len(rl_config.buckets))]
+        train_bucket_sizes = [len(train_set[b]) for b in range(len(rl_config.buckets))]
         train_total_size = float(sum(train_bucket_sizes))
         train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
-                               for i in xrange(len(train_bucket_sizes))]
+                               for i in range(len(train_bucket_sizes))]
         step_time, loss = 0.0, 0.0
         current_step = 0
         previous_losses = []
@@ -200,7 +202,7 @@ def pre_rl_train(rl_config):
 
         while True:
             random_number_01 = np.random.random_sample()
-            bucket_id = min([i for i in xrange(len(train_buckets_scale)) if train_buckets_scale[i] > random_number_01])
+            bucket_id = min([i for i in range(len(train_buckets_scale)) if train_buckets_scale[i] > random_number_01])
 
             # Get a batch and make a step.
             start_time = time.time()
@@ -234,7 +236,7 @@ def pre_rl_train(rl_config):
                 gen_ckpt_dir = os.path.abspath(os.path.join(rl_config.train_dir, "checkpoints"))
                 if not os.path.exists(gen_ckpt_dir):
                     os.makedirs(gen_ckpt_dir)
-                checkpoint_path = os.path.join(gen_ckpt_dir, "chitchat.model")
+                checkpoint_path = os.path.join(gen_ckpt_dir, "movie_subtitle.model")
                 rl_model.saver.save(sess, checkpoint_path, global_step=rl_model.global_step)
                 step_time, loss = 0.0, 0.0
                 # Run evals on development set and print their perplexity.
@@ -250,7 +252,7 @@ def pre_rl_train(rl_config):
 
 
 def train():
-    vocab, rev_vocab, dev_set, train_set = prepare_data(grl_config)
+    vocab, rev_vocab, train_set = prepare_data(grl_config)
     for b_set in train_set:
         print("b_set length: ", len(b_set))
 
@@ -311,7 +313,7 @@ def train():
                 gen_ckpt_dir = os.path.abspath(os.path.join(grl_config.train_dir, "checkpoints"))
                 if not os.path.exists(gen_ckpt_dir):
                     os.makedirs(gen_ckpt_dir)
-                checkpoint_path = os.path.join(gen_ckpt_dir, "chitchat.model")
+                checkpoint_path = os.path.join(gen_ckpt_dir, "movie_subtitle.model")
                 rl_model.saver.save(sess, checkpoint_path, global_step=rl_model.global_step)
                 step_time, loss = 0.0, 0.0
                 # Run evals on development set and print their perplexity.
@@ -326,7 +328,7 @@ def train():
 
 
 def test_decoder(config):
-    train_path = os.path.join(config.train_dir, "chitchat.train")
+    train_path = os.path.join(config.train_dir, "movie_subtitle.train")
     data_path_list = [train_path + ".answer", train_path + ".query"]
     vocab_path = os.path.join(config.train_dir, "vocab%d.all" % config.vocab_size)
     data_utils.create_vocabulary(vocab_path, data_path_list, config.vocab_size)
@@ -381,12 +383,12 @@ def test_decoder(config):
 
 
 def decoder(config):
-    vocab, rev_vocab, dev_set, train_set = prepare_data(config)
+    vocab, rev_vocab, train_set = prepare_data(config)
 
-    train_bucket_sizes = [len(train_set[b]) for b in xrange(len(config.buckets))]
+    train_bucket_sizes = [len(train_set[b]) for b in range(len(config.buckets))]
     train_total_size = float(sum(train_bucket_sizes))
     train_buckets_scale = [sum(train_bucket_sizes[:i + 1]) / train_total_size
-                           for i in xrange(len(train_bucket_sizes))]
+                           for i in range(len(train_bucket_sizes))]
 
     with tf.Session() as sess:
         model = create_st_model(sess, config, forward_only=True, name_scope=config.name_model)
@@ -399,7 +401,7 @@ def decoder(config):
         while num_step < 50000:
             print("generating num_step: ", num_step)
             random_number_01 = np.random.random_sample()
-            bucket_id = min([i for i in xrange(len(train_buckets_scale))
+            bucket_id = min([i for i in range(len(train_buckets_scale))
                              if train_buckets_scale[i] > random_number_01])
 
             encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, batch_source_decoder = \
@@ -459,11 +461,11 @@ def main(_):
     # model_2 P(a|pi,qi)
     # ce_standard_train(gcc_config)
 
-    # model_3 P(s|a)
-    #ce_standard_train(gst_config)
+    #model_3 P(s|a)
+    ce_standard_train(gst_config)
 
     # model_4.1 pre P_rl
-    #pre_rl_train(pre_grl_config)
+    pre_rl_train(pre_grl_config)
 
     # model_4.2 P_rl
     train()
