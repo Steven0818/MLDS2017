@@ -54,19 +54,25 @@ class Main():
         with open(fpath, 'w') as f:
             json.dump(_dict, f)
 
-    def create_line_dict(self, worddict='worddict.txt', output='linedict.json'):
+    def create_line_dict(self, worddict='worddict.txt', output='linedict.json', limit=30):
         lines = self._load_lines()
 
         outpath = os.path.join(self.data_dir, output)
         indict = WordDict.fromcsv(worddict)
 
         _dict = {i: indict.batch_get(line.split()) for i, line in lines.items()}
+        _dict2 = {i: line for i, line in _dict.items() if len(line) <= limit}
 
         with open(outpath, 'w') as f:
-            json.dump(_dict, f)
+            json.dump(_dict2, f)
 
-    def create_conv_dict(self, output='convdict.json'):
+    def create_conv_dict(self, linedict='linedict.json', output='convdict.json'):
         convs = self._load_conversations()
+        linedict = json.load(open(os.path.join(self.data_dir, linedict)))
+
+        convs = [conv for conv in tqdm(convs)
+                 if all(str(line) in linedict for line in conv)]
+
         fpath = os.path.join(self.data_dir, output)
         with open(fpath, 'w') as f:
             json.dump(convs, f)
