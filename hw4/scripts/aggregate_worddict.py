@@ -12,8 +12,9 @@ def main(args):
 
     common = counter.most_common(limit)
     _dict = {w: i
-             for i, (w, _) in enumerate(common, start=1)}
+             for i, (w, _) in enumerate(common, start=2)}
     _dict['<unk>'] = 0
+    _dict['<pad>'] = 1
 
     with open(args.output, 'w') as f:
         for k, v in _dict.items():
