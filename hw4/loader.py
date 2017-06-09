@@ -9,7 +9,7 @@ Load 63440 convs
 >>> data.start_loaders(n=4)
 
 # In each round, call data.get()
->>> a, x = data.get()
+>>> a, x, mask = data.get()
 >>> print(a, [m.shape for m in x])
 0 [(5, 20), (10, 20)]
 """
@@ -31,6 +31,8 @@ class Data:
                  batch_size=20):
         self.convlen = convlen
         self.batch_size = batch_size
+        self.queue = mp.Queue(maxsize=100)
+        self.workers = []
 
         # Change internal buckets to line-ordered
         # So [(1, 2), (2, 3), (3, 4)] becomes [[1, 2, 3], [2, 3, 4]]
@@ -48,9 +50,6 @@ class Data:
         self.convs, self.total_convs, self.total_convs_weight = self.load_convdict(
             os.path.join(data_dir, 'convdict.txt'))
         print('Load {} convs'.format(len(self.convs)))
-
-        self.queue = mp.Queue(maxsize=100)
-        self.workers = []
 
 
     def reset(self, retain_convdict=False, retain_linedict=False):
@@ -154,11 +153,14 @@ class Data:
         """
         # Create the 2d batch-major array and transpose it in the end
         ret = np.zeros((len(lineids), bucket_len), dtype=np.int32)
+        mask = np.ones((len(lineids), bucket_len), dtype=np.int32)
 
         for i, line in enumerate(lineids):
             words = self.lines[line]
             ret[i, :len(words)] = words
-        return np.transpose(ret)
+            mask[i, :len(words)] = 0
+
+        return np.transpose(ret), np.transpose(mask)
 
 
     def add_to_queue(self):
@@ -173,10 +175,12 @@ class Data:
         while True:
             bucket_id, convs = self.get_conv_batch(self.batch_size)
             lines = []
+            masks = []
 
             for i in range(self.convlen):
-                line = self.get_line_batch(self.buckets[i, bucket_id],
-                                           convs[:, i])
+                line, mask = self.get_line_batch(self.buckets[i, bucket_id],
+                                                 convs[:, i])
                 lines.append(line)
+                masks.append(mask)
 
-            self.queue.put((bucket_id, lines))
+            self.queue.put((bucket_id, lines, masks))
