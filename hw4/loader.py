@@ -3,6 +3,9 @@ Usage:
 >>> data_dir = './data'
 >>> buckets = [(5, 10), (10, 20), (20, 30), (30, 30)]
 >>> data = Data(data_dir, buckets, convlen=2, batch_size=20)
+Load 278468 lines
+Load 3002 words
+Load 63440 convs
 >>> data.start_loaders(n=4)
 
 # In each round, call data.get()
@@ -16,8 +19,9 @@ import random
 from bisect import bisect_left
 import multiprocessing as mp
 import numpy as np
-from tqdm import tqdm
 from worddict import WordDict
+
+np.set_printoptions(precision=4, linewidth=150)
 
 class Data:
     def __init__(self,
@@ -32,24 +36,54 @@ class Data:
         # So [(1, 2), (2, 3), (3, 4)] becomes [[1, 2, 3], [2, 3, 4]]
         self.buckets = np.array(buckets, dtype=np.int32).T
 
-        # Line Dict
-        linedict = open(os.path.join(data_dir, 'linedict.txt')).read().splitlines()
-        self.line = {}
-        for line in tqdm(linedict, desc='Load lines'):
-            t = [int(x) for x in line.split()]
-            self.line[t[0]] = t[2:]
-
-        # Word Dict
-        self.worddict = WordDict.fromcsv(os.path.join(data_dir, 'worddict.txt'))
+        # Word Dict {str: int} and {int: str}
+        self.worddict = self.load_worddict(os.path.join(data_dir, 'worddict.txt'))
         print('Load {} words'.format(len(self.worddict)))
 
-        # Conversation List
-        convdict = open(os.path.join(data_dir, 'convdict.txt')).read().splitlines()
+        # Line Dict {int: [int]}
+        self.lines = self.load_linedict(os.path.join(data_dir, 'linedict.txt'))
+        print('Load {} lines'.format(len(self.lines)))
+
+        # Conversation List [[int]] or [[[int]]]
+        self.convs, self.total_convs, self.total_convs_weight = self.load_convdict(
+            os.path.join(data_dir, 'convdict.txt'))
+        print('Load {} convs'.format(len(self.convs)))
+
+        self.queue = mp.Queue(maxsize=100)
+        self.workers = []
+
+
+    def reset(self, retain_convdict=False, retain_linedict=False):
+        """
+        Terminate all children process and flush queue
+        """
+        # convdict can be retained only if linedict is unchanged
+        retain_convdict = retain_convdict and retain_linedict
+
+        for p in self.workers:
+            p.terminate()
+        self.workers = []
+
+        del self.queue
+        self.queue = mp.Queue(maxsize=100)
+
+        if not retain_convdict:
+            del self.convs
+            del self.total_convs
+            del self.total_convs_weight
+
+        if not retain_linedict:
+            del self.lines
+
+
+    def load_convdict(self, fpath):
+        convdict = open(fpath).read().splitlines()
         convs = []
-        total_convs = [[] for _ in buckets]
-        for conv in tqdm(convdict, desc='Load conversations'):
+        cum_weight = [0]
+        total_convs = [[] for _ in range(self.buckets.shape[1])]
+        for conv in convdict:
             t = [int(x) for x in conv.split()]
-            if len(t) < convlen:
+            if len(t) < self.convlen:
                 continue
 
             for x in (t[i:i+self.convlen] for i in range(len(t) - self.convlen)):
@@ -57,21 +91,33 @@ class Data:
                 total_convs[bucket_id].append(x)
             convs.append(t)
 
-        self.conv = np.array(convs)
-        self.total_convs = total_convs
-        self.total_convs_weight = [0]
         for t in total_convs:
-            self.total_convs_weight.append(len(t) + self.total_convs_weight[-1])
+            cum_weight.append(len(t) + cum_weight[-1])
 
-        self.queue = mp.Queue(maxsize=100)
-        self.workers = []
+        conv = np.array(convs)
+        return conv, total_convs, cum_weight
+
+
+    def load_linedict(self, fpath):
+        linedict = open(fpath).read().splitlines()
+        lines = {}
+        for line in linedict:
+            t = [int(x) for x in line.split()]
+            lines[t[0]] = t[2:]
+        return lines
+
+
+    def load_worddict(self, fpath):
+        return WordDict.fromcsv(fpath)
+
 
     def get_bucket_id(self, convs):
         bucket_id = -1
         for i, line in enumerate(convs):
-            new_bucket_id = bisect_left(self.buckets[i], len(self.line[line]))
+            new_bucket_id = bisect_left(self.buckets[i], len(self.lines[line]))
             bucket_id = max(new_bucket_id, bucket_id)
         return bucket_id
+
 
     def start_loaders(self, n=4):
         for _ in range(n):
@@ -79,8 +125,10 @@ class Data:
             p.start()
             self.workers.append(p)
 
+
     def get(self):
         return self.queue.get() # NOTICE: it is blocking
+
 
     def get_conv_batch(self, batch_size):
         """
@@ -90,10 +138,11 @@ class Data:
         """
         bucket_id = bisect_left(
             self.total_convs_weight,
-            np.random.randint(0, self.total_convs_weight[-1])) - 1
+            random.randint(0, self.total_convs_weight[-1])) - 1
         ret = random.choices(self.total_convs[bucket_id], k=batch_size)
 
         return bucket_id, np.array(ret)
+
 
     def get_line_batch(self, bucket_len, lineids):
         """
@@ -107,9 +156,10 @@ class Data:
         ret = np.zeros((len(lineids), bucket_len), dtype=np.int32)
 
         for i, line in enumerate(lineids):
-            words = self.line[line]
+            words = self.lines[line]
             ret[i, :len(words)] = words
-        return ret.T
+        return np.transpose(ret)
+
 
     def add_to_queue(self):
         """
