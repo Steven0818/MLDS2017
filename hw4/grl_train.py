@@ -462,10 +462,10 @@ def main(_):
     # ce_standard_train(gcc_config)
 
     #model_3 P(s|a)
-    ce_standard_train(gst_config)
+    # ce_standard_train(gst_config)
 
-    # model_4.1 pre P_rl
-    #pre_rl_train(pre_grl_config)
+    #model_4.1 pre P_rl
+    pre_rl_train(pre_grl_config)
 
     # model_4.2 P_rl
     #train()

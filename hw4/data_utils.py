@@ -44,6 +44,9 @@ UNK_ID = 3
 _WORD_SPLIT = re.compile(b"([.,!?\"':;)(])")
 _DIGIT_RE = re.compile(br"\d")
 
+REPLACE_CHAR = r'[-\"_:\+\-()\[\]<>\\]|(\.){2,}'
+PREPEND_SPACE = r'(\!|\?|\.|\,)'
+
 # URLs for WMT data.
 _WMT_ENFR_TRAIN_URL = "http://www.statmt.org/wmt10/training-giga-fren.tar"
 _WMT_ENFR_DEV_URL = "http://www.statmt.org/wmt15/dev-v2.tgz"
@@ -103,13 +106,19 @@ def get_wmt_enfr_dev_set(directory):
   return dev_path
 
 
-def basic_tokenizer(sentence):
+def basic_tokenizer(s):
   """Very basic tokenizer: split the sentence into a list of tokens."""
-  words = []
-  sentence = sentence.lower()
-  for space_separated_fragment in sentence.strip().split():
-    words.extend(_WORD_SPLIT.split(space_separated_fragment))
-  return [w for w in words if w]
+  #words = []
+  #sentence = sentence.lower()
+  ret = re.sub(r'\' | \'|^\'| \'$', ' ', s.decode('utf-8'))
+  ret = re.sub(REPLACE_CHAR, '', ret)
+  ret = re.sub(PREPEND_SPACE, r' \1', ret)
+  ret = ret.lower()
+  ret = ret.encode()
+  return ret.split()
+  #for space_separated_fragment in sentence.strip().split():
+  #  words.extend(_WORD_SPLIT.split(space_separated_fragment))
+  #return [w for w in words if w]
 
 
 def create_vocabulary(vocabulary_path, data_path_list, max_vocabulary_size,

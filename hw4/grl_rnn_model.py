@@ -436,7 +436,7 @@ class grl_model(object):
                 encoder_input = encoder_input_a[batch_i]
             elif type == 0:
                 encoder_input, decoder_input = random.choice(train_data[bucket_id])
-                print("train en: %s, de: %s" % (encoder_input, decoder_input))
+                #print("train en: %s, de: %s" % (encoder_input, decoder_input))
 
             batch_source_encoder.append(encoder_input)
             batch_source_decoder.append(decoder_input)
