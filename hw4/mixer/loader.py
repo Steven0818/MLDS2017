@@ -158,10 +158,12 @@ class Data:
         for i, line in enumerate(lineids):
             words = self.lines[line]
             ret[i, :len(words)] = words
-            mask[i, :len(words)] = 0
+            mask[i, len(words):] = 0
 
-        return np.transpose(ret), np.transpose(mask)
+        ret = np.split(np.transpose(ret), 1)[0]
+        mask = np.split(np.transpose(mask), 1)[0]
 
+        return ret, mask
 
     def add_to_queue(self):
         """
@@ -184,3 +186,9 @@ class Data:
                 masks.append(mask)
 
             self.queue.put((bucket_id, lines, masks))
+
+
+    def __len__(self):
+        if hasattr(self, 'total_convs_weight'):
+            return self.total_convs_weight[-1]
+        return 0

@@ -18,11 +18,13 @@ from __future__ import division
 from __future__ import print_function
 
 import copy
-
+import pdb
 # We disable pylint because we need python3 compatibility.
 from six.moves import xrange  # pylint: disable=redefined-builtin
 from six.moves import zip  # pylint: disable=redefined-builtin
 
+import tensorflow as tf
+from tensorflow.contrib.rnn.python.ops import core_rnn
 from tensorflow.contrib.rnn.python.ops import core_rnn_cell
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -37,7 +39,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.util import nest
 
 # TODO(ebrevdo): Remove once _linear is fully deprecated.
-linear = rnn_cell_impl._linear  # pylint: disable=protected-access
+# linear = rnn_cell_impl._linear  # pylint: disable=protected-access
 
 
 def _argmax_or_mcsearch(embedding,
@@ -48,17 +50,15 @@ def _argmax_or_mcsearch(embedding,
         if output_projection is not None:
             prev = nn_ops.xw_plus_b(prev, output_projection[0], output_projection[1])
 
-
         if isinstance(mc_search, bool):
             prev_symbol = tf.reshape(tf.multinomial(prev, 1), [-1]) if mc_search else math_ops.argmax(prev, 1)
         else:
             prev_symbol = tf.cond(mc_search, lambda: tf.reshape(tf.multinomial(prev, 1), [-1]), lambda: tf.argmax(prev, 1))
 
-
         emb_prev = embedding_ops.embedding_lookup(embedding, prev_symbol)
         if not update_embedding:
             emb_prev = array_ops.stop_gradient(emb_prev)
-        return emb_prev
+        return emb_prev, prev_symbol
     return loop_function
 
 
@@ -87,7 +87,7 @@ def _extract_argmax_and_embed(embedding,
     emb_prev = embedding_ops.embedding_lookup(embedding, prev_symbol)
     if not update_embedding:
       emb_prev = array_ops.stop_gradient(emb_prev)
-    return emb_prev
+    return emb_prev, prev_symbol
 
   return loop_function
 
@@ -130,15 +130,17 @@ def rnn_decoder(decoder_inputs,
     for i, inp in enumerate(decoder_inputs):
       if loop_function is not None and prev is not None:
         with variable_scope.variable_scope("loop_function", reuse=True):
-          inp = loop_function(prev, i)
-          inps.append[inp]
+          inp, prev_symbol = loop_function(prev, i)
+          inps.append(prev_symbol)
+
       if i > 0:
         variable_scope.get_variable_scope().reuse_variables()
       output, state = cell(inp, state)
+      # inps.append(tf.reshape(tf.multinomial(output, 1), [-1]))
       outputs.append(output)
       if loop_function is not None:
         prev = output
-  return outputs, inp, state
+  return outputs, inps, state
 
 
 def basic_rnn_seq2seq(encoder_inputs,
@@ -230,7 +232,7 @@ def embedding_rnn_decoder(decoder_inputs,
 
     embedding = variable_scope.get_variable("embedding",
                                             [num_symbols, embedding_size])
-    loop_function = _argmax_or_mcsearch(
+    loop_function = _extract_argmax_and_embed(
         embedding, output_projection,
         update_embedding_for_previous) if feed_previous else None
     emb_inp = (embedding_ops.embedding_lookup(embedding, i)
@@ -308,7 +310,7 @@ def embedding_rnn_seq2seq(encoder_inputs,
       cell = core_rnn_cell.OutputProjectionWrapper(cell, num_decoder_symbols)
 
     if isinstance(feed_previous, bool):
-      return embedding_rnn_decoder(
+      outputs, inps, state = embedding_rnn_decoder(
           decoder_inputs,
           encoder_state,
           cell,
@@ -316,7 +318,9 @@ def embedding_rnn_seq2seq(encoder_inputs,
           embedding_size,
           output_projection=output_projection,
           feed_previous=feed_previous)
-
+      if output_projection is not None:
+        inps.append(tf.reshape(tf.multinomial(outputs[-1], 1), [-1]))
+      return outputs, inps, state
     # If feed_previous is a Tensor, we construct 2 graphs and use cond.
     def decoder(feed_previous_bool):
       reuse = None if feed_previous_bool else True
@@ -376,8 +380,7 @@ def sequence_loss_by_example(logits,
   if len(targets) != len(logits) or len(weights) != len(logits):
     raise ValueError("Lengths of logits, weights, and targets must be the same "
                      "%d, %d, %d." % (len(logits), len(weights), len(targets)))
-  with ops.name_scope(name, "sequence_loss_by_example",
-                      logits + targets + weights):
+  with ops.name_scope(name, "sequence_loss_by_example"):
     log_perp_list = []
     for logit, target, weight in zip(logits, targets, weights):
       if softmax_loss_function is None:
@@ -424,7 +427,7 @@ def sequence_loss(logits,
   Raises:
     ValueError: If len(logits) is different from len(targets) or len(weights).
   """
-  with ops.name_scope(name, "sequence_loss", logits + targets + weights):
+  with ops.name_scope(name, "sequence_loss"):
     cost = math_ops.reduce_sum(
         sequence_loss_by_example(
             logits,
@@ -503,10 +506,13 @@ def model_with_buckets(encoder_inputs,
           variable_scope.get_variable_scope(), reuse=True if j > 0 else None):
         bucket_outputs, bucket_feeds, _ = seq2seq(encoder_inputs[:bucket[0]],
                                                   decoder_inputs[:bucket[1]])
-        tmp_indices = tf.where(tf.equal(bucket_outputs, bucket_feeds))
-        result = tf.segment_min(tmp_indices[:, 1], tmp_indices[:, 0])
-        results.append(result)
-        outputs.append(tf.nn.softmax(bucket_outputs))
+        # result = []
+        # for bucket_output, bucket_feed in zip(bucket_outputs, bucket_feeds):
+        #   tmp_indice = tf.where(tf.equal(bucket_output, bucket_feed))
+        #   t = tf.segment_min(tmp_indice[:, 1], tmp_indice[:, 0])
+        #   result.append(t)
+        results.append(bucket_feeds)
+        outputs.append(bucket_outputs)
         if per_example_loss:
           losses.append(
               sequence_loss_by_example(

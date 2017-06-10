@@ -25,7 +25,7 @@ import numpy as np
 from six.moves import xrange    # pylint: disable=redefined-builtin
 import tensorflow as tf
 
-from seq2seq import model_with_buckets, embedding_rnn_seq2seq
+from .seq2seq import model_with_buckets, embedding_rnn_seq2seq
 
 
 class Seq2SeqModel(object):
@@ -156,14 +156,15 @@ class Seq2SeqModel(object):
                                                       name="weight{0}".format(i)))
             self.external_loss.append(tf.placeholder(dtype, shape=[],
                                                      name="external_loss{0}".format(i)))
-
+        self.rewards = [tf.placeholder(tf.float32, name="reward{0}".format(i))
+                        for i in range(len(self.buckets))]
         # Our targets are decoder inputs shifted by one.
         targets = [self.decoder_inputs[i + 1]
                    for i in xrange(len(self.decoder_inputs) - 1)]
 
         # Training outputs and feeds.
         if forward_only:
-            self.outputs, self.results = model_with_buckets(
+            self.outputs, self.results, self.losses = model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True),
                 softmax_loss_function=softmax_loss_function)
@@ -175,12 +176,17 @@ class Seq2SeqModel(object):
                         for output in self.outputs[b]
                     ]
         else:
-            self.outputs, self.results, self.losses = tf.contrib.legacy_seq2seq.model_with_buckets(
+            self.outputs, self.results, self.losses = model_with_buckets(
                 self.encoder_inputs, self.decoder_inputs, targets,
                 self.target_weights, buckets,
-                lambda x, y: seq2seq_f(x, y, False),
+                lambda x, y: seq2seq_f(x, y, True),
                 softmax_loss_function=softmax_loss_function)
-
+            if output_projection is not None:
+                for b in xrange(len(buckets)):
+                    self.outputs[b] = [
+                        tf.matmul(output, output_projection[0]) + output_projection[1]
+                        for output in self.outputs[b]
+                    ]
         # Gradients and SGD update operation for training the model.
         params = tf.trainable_variables()
         if not forward_only:
@@ -188,17 +194,9 @@ class Seq2SeqModel(object):
             self.pretrain_update = []
             opt = tf.train.GradientDescentOptimizer(self.learning_rate)
             for b in xrange(len(buckets)):
+                adjusted_losses = tf.multiply(self.losses[b], self.rewards[b])
                 gradient_norms = []
-                gradients = tf.gradients(self.external_loss[b], params)
-                clipped_gradients, norm = tf.clip_by_global_norm(gradients,
-                                                                 max_gradient_norm)
-                gradient_norms.append(norm)
-                self.updates.append(opt.apply_gradients(
-                    zip(clipped_gradients, params), global_step=self.global_step))
-
-
-                gradient_norms = []
-                gradients = tf.gradients(self.losses[b], params)
+                gradients = tf.gradients(adjusted_losses, params)
                 clipped_gradients, norm = tf.clip_by_global_norm(gradients,
                                                                  max_gradient_norm)
                 gradient_norms.append(norm)
@@ -240,6 +238,8 @@ class Seq2SeqModel(object):
             input_feed[self.encoder_inputs[l].name] = encoder_inputs[l]
         for l in xrange(decoder_size):
             input_feed[self.decoder_inputs[l].name] = decoder_inputs[l]
+        for l in xrange(len(self.rewards)):
+            input_feed[self.rewards[l].name] = 1
 
         # Since our targets are decoder inputs shifted by one, we need one more.
         last_target = self.decoder_inputs[decoder_size].name
@@ -249,13 +249,21 @@ class Seq2SeqModel(object):
         output_feed = []
         for l in xrange(decoder_size):  # Output logits.
             output_feed.append(self.outputs[bucket_id][l])
+        for l in xrange(decoder_size):  # Output logits.
             output_feed.append(self.results[bucket_id][l])
 
         outputs = session.run(output_feed, input_feed)
-        return None, outputs[:decoder_size], outputs[decoder_size:]    # outputs, results
 
+        # [(batch, word_size)], [(batch)]
+        logits, result = outputs[:decoder_size], outputs[decoder_size:]
 
-    def update(self, session, outputs, rewards, bucket_id):
+        ret = np.zeros((len(result), self.batch_size), dtype=np.int32)
+        for i, r in enumerate(result):
+            ret[i] = r
+        ret = ret.transpose()
+        return logits, ret
+
+    def update(self, session, rewards, bucket_id):
         """Run a step of the model feeding the given external_losses.
         """
         input_feed = {self.external_loss[bucket_id].name: rewards}
@@ -264,51 +272,52 @@ class Seq2SeqModel(object):
         session.run(output_feed, input_feed)
 
 
-  def pretrain(self, session, encoder_inputs, decoder_inputs, target_weights,
-           bucket_id):
-    """Run a step of the model feeding the given inputs.
-    Args:
-      session: tensorflow session to use.
-      encoder_inputs: list of numpy int vectors to feed as encoder inputs.
-      decoder_inputs: list of numpy int vectors to feed as decoder inputs.
-      target_weights: list of numpy float vectors to feed as target weights.
-      bucket_id: which bucket of the model to use.
-      forward_only: whether to do the backward step or only forward.
-    Returns:
-      A triple consisting of gradient norm (or None if we did not do backward),
-      average perplexity, and the outputs.
-    Raises:
-      ValueError: if length of encoder_inputs, decoder_inputs, or
-        target_weights disagrees with bucket size for the specified bucket_id.
-    """
-    # Check if the sizes match.
-    encoder_size, decoder_size = self.buckets[bucket_id]
-    if len(encoder_inputs) != encoder_size:
-      raise ValueError("Encoder length must be equal to the one in bucket,"
-                       " %d != %d." % (len(encoder_inputs), encoder_size))
-    if len(decoder_inputs) != decoder_size:
-      raise ValueError("Decoder length must be equal to the one in bucket,"
-                       " %d != %d." % (len(decoder_inputs), decoder_size))
-    if len(target_weights) != decoder_size:
-      raise ValueError("Weights length must be equal to the one in bucket,"
-                       " %d != %d." % (len(target_weights), decoder_size))
+    def pretrain(self, session, encoder_inputs, decoder_inputs, target_weights,
+                 bucket_id):
+        """Run a step of the model feeding the given inputs.
+        Args:
+        session: tensorflow session to use.
+        encoder_inputs: list of numpy int vectors to feed as encoder inputs.
+        decoder_inputs: list of numpy int vectors to feed as decoder inputs.
+        target_weights: list of numpy float vectors to feed as target weights.
+        bucket_id: which bucket of the model to use.
+        forward_only: whether to do the backward step or only forward.
+        Returns:
+        A triple consisting of gradient norm (or None if we did not do backward),
+        average perplexity, and the outputs.
+        Raises:
+        ValueError: if length of encoder_inputs, decoder_inputs, or
+            target_weights disagrees with bucket size for the specified bucket_id.
+        """
+        # Check if the sizes match.
+        encoder_size, decoder_size = self.buckets[bucket_id]
+        if len(encoder_inputs) != encoder_size:
+            raise ValueError("Encoder length must be equal to the one in bucket,"
+                             " %d != %d." % (len(encoder_inputs), encoder_size))
+        if len(decoder_inputs) != decoder_size:
+            raise ValueError("Decoder length must be equal to the one in bucket,"
+                             " %d != %d." % (len(decoder_inputs), decoder_size))
+        if len(target_weights) != decoder_size:
+            raise ValueError("Weights length must be equal to the one in bucket,"
+                             " %d != %d." % (len(target_weights), decoder_size))
 
-    # Input feed: encoder inputs, decoder inputs, target_weights, as provided.
-    input_feed = {}
-    for l in xrange(encoder_size):
-      input_feed[self.encoder_inputs[l].name] = encoder_inputs[l]
-    for l in xrange(decoder_size):
-      input_feed[self.decoder_inputs[l].name] = decoder_inputs[l]
-      input_feed[self.target_weights[l].name] = target_weights[l]
+        # Input feed: encoder inputs, decoder inputs, target_weights, as provided.
+        input_feed = {}
+        for l in xrange(encoder_size):
+            input_feed[self.encoder_inputs[l].name] = encoder_inputs[l]
+        for l in xrange(decoder_size):
+            input_feed[self.decoder_inputs[l].name] = decoder_inputs[l]
+            input_feed[self.target_weights[l].name] = target_weights[l]
+        for l in xrange(len(self.rewards)):
+            input_feed[self.rewards[l].name] = 1
 
-    # Since our targets are decoder inputs shifted by one, we need one more.
-    last_target = self.decoder_inputs[decoder_size].name
-    input_feed[last_target] = np.zeros([self.batch_size], dtype=np.int32)
+        # Since our targets are decoder inputs shifted by one, we need one more.
+        last_target = self.decoder_inputs[decoder_size].name
+        input_feed[last_target] = np.zeros([self.batch_size], dtype=np.int32)
 
-    # Output feed: depends on whether we do a backward step or not.
-    output_feed = [self.pretrain_updates[bucket_id],  # Update Op that does SGD.
-                   self.losses[bucket_id]]  # Loss for this batch.
+        # Output feed: depends on whether we do a backward step or not.
+        output_feed = [self.pretrain_update[bucket_id],  # Update Op that does SGD.
+                       self.losses[bucket_id]]  # Loss for this batch.
 
-
-    outputs = session.run(output_feed, input_feed)
-    return outputs[1]   # Loss
+        outputs = session.run(output_feed, input_feed)
+        return outputs[1]   # Loss
