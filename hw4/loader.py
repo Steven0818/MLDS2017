@@ -87,6 +87,8 @@ class Data:
 
             for x in (t[i:i+self.convlen] for i in range(len(t) - self.convlen)):
                 bucket_id = self.get_bucket_id(x)
+                if bucket_id >= self.buckets.shape[1]:
+                    continue
                 total_convs[bucket_id].append(x)
             convs.append(t)
 
@@ -114,7 +116,7 @@ class Data:
         bucket_id = -1
         for i, line in enumerate(convs):
             new_bucket_id = bisect_left(self.buckets[i], len(self.lines[line]))
-            bucket_id = max(new_bucket_id, bucket_id)
+            bucket_id   = max(new_bucket_id, bucket_id)
         return bucket_id
 
 
@@ -138,7 +140,8 @@ class Data:
         bucket_id = bisect_left(
             self.total_convs_weight,
             random.randint(0, self.total_convs_weight[-1])) - 1
-        ret = random.choices(self.total_convs[bucket_id], k=batch_size)
+        idxes = np.random.choice(range(len(self.total_convs[bucket_id])), batch_size)
+        ret = [self.total_convs[bucket_id][i] for i in idxes]
 
         return bucket_id, np.array(ret)
 
@@ -152,13 +155,13 @@ class Data:
         Return: np array with shape (bucket_len, L)
         """
         # Create the 2d batch-major array and transpose it in the end
-        ret = np.zeros((len(lineids), bucket_len), dtype=np.int32)
-        mask = np.ones((len(lineids), bucket_len), dtype=np.int32)
+        ret = np.ones((len(lineids), bucket_len), dtype=np.int32)
+        mask = np.zeros((len(lineids), bucket_len), dtype=np.int32)
 
         for i, line in enumerate(lineids):
             words = self.lines[line]
             ret[i, :len(words)] = words
-            mask[i, :len(words)] = 0
+            mask[i, :len(words)] = 1
 
         return np.transpose(ret), np.transpose(mask)
 
