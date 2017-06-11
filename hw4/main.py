@@ -21,7 +21,7 @@ class GRLConfig(object):
 
 def main():
     grl_config = GRLConfig()
-    cornell_data = Data('./scripts/', [(10, 10), (15, 10), (20, 15), (40, 25), (50,30), (80,50), (100,50)])
+    cornell_data = Data('./scripts/', [(10, 10), (15, 10), (20, 15), (40, 25), (50,30), (80,50), (100,50)], batch_size=40)
     model = grl_model(grl_config, num_samples=512, forward=False, beam_search=False, dtype=tf.float32)
     model.create_placeholder()
     model.build_training_graph('grl_model')

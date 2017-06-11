@@ -144,7 +144,7 @@ class grl_model(object):
     def initialize_network(self):
         print("Initializing network...")
         
-        config = tf.ConfigProto(log_device_placement = True)
+        config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
 
         self.sess = tf.Session(config=config)
@@ -163,10 +163,10 @@ class grl_model(object):
             input_feed = {self.forward_only.name: False}
             
             for i in range(encoder_size):
-                input_feed[self.encoder_inputs[i].name] = x[0][:,i]
+                input_feed[self.encoder_inputs[i].name] = x[0][i,:]
             for i in range(decoder_size):
-                input_feed[self.decoder_inputs[i].name] = x[1][:,i]
-                input_feed[self.target_weights[i].name] = mask[1][:,i]
+                input_feed[self.decoder_inputs[i].name] = x[1][i,:]
+                input_feed[self.target_weights[i].name] = mask[1][i,:]
             for i in range(len(self.buckets)):
                 input_feed[self.rewards[i].name] = 1.
 
@@ -174,7 +174,7 @@ class grl_model(object):
             input_feed[last_target] = np.ones([self.batch_size], dtype=np.int32)
 
             output_feed = [self.s2s_updates[bucket_id],
-                           self.gradient_norms[bucket_id],
+                           self.s2s_gradient_norms[bucket_id],
                            self.losses[bucket_id]]
             _, _, loss = self.sess.run(output_feed, input_feed)
             
@@ -183,13 +183,12 @@ class grl_model(object):
             
             if it != 0 and  it % 1000 == 0:
                 _test(reverse_worddict, it)
-
             
     def _test(self, reverse_worddict, iter_count):
         sentence1 = [3, 60, 20, 12, 68, 7, 4, 1, 1, 1] #how is it going?
-        sentence2 = [3, 190, 64, 207, 2, 4 ,1,1,1,1] #let's go home.
-        sentence3 = [3, 8, 22, 43, 21, 2969, 2, 4,1,1] #I don't like this soup.
-        sentence4 = [3, 21, 1599, 2894, 2, 4, 1, 1,1,1] #This weather sucks.
+        sentence2 = [3, 190, 64, 207, 2, 4 , 1, 1, 1, 1] #let's go home.
+        sentence3 = [3, 8, 22, 43, 21, 2969, 2, 4, 1, 1] #I don't like this soup.
+        sentence4 = [3, 21, 1599, 2894, 2, 4, 1, 1, 1, 1] #This weather sucks.
 
         sent_list = np.array([sentence1, sentence2, sentence3, sentence4])
         
