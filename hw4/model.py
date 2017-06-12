@@ -115,7 +115,7 @@ class grl_model(object):
             self.s2s_gradient_norms = []
             self.s2s_updates = []
             self.s2s_output_widx = []
-            opt1 = tf.train.GradientDescentOptimizer(self.learning_rate)
+            opt1 = tf.train.AdamOptimizer(self.learning_rate)
             for b in range(len(self.buckets)):
                 max_idx = [tf.argmax(step_batch, 1) for step_batch in self.outputs[b]]
                 self.s2s_output_widx.append(max_idx)
@@ -128,7 +128,7 @@ class grl_model(object):
         with tf.name_scope("rl_Gradient"):
             self.rl_gradient_norms = []
             self.rl_updates = []
-            opt2 = tf.train.GradientDescentOptimizer(self.learning_rate)
+            opt2 = tf.train.AdamOptimizer(self.learning_rate)
             for b in range(len(self.buckets)):
                 adjusted_losses = tf.multiply(self.losses[b], self.rewards[b])
                 gradients = tf.gradients(adjusted_losses, self.t_vars)
@@ -181,8 +181,8 @@ class grl_model(object):
             if it != 0 and it % 20 == 0:
                 print("Iteration %d, loss : %f" % (it, loss))
             
-            if it != 0 and  it % 1000 == 0:
-                _test(reverse_worddict, it)
+            if it != 0 and  it % 2000 == 0:
+                self._test(reverse_worddict, it)
             
     def _test(self, reverse_worddict, iter_count):
         sentence1 = [3, 60, 20, 12, 68, 7, 4, 1, 1, 1] #how is it going?
@@ -207,15 +207,14 @@ class grl_model(object):
         last_target = self.decoder_inputs[decoder_size].name
         input_feed[last_target] = np.ones([4], dtype=np.int32)
 
-        output_feed = [self.s2s_output_widx[bucket_id]]
+        output_feed = [self.s2s_output_widx[0]]
 
         output = self.sess.run(output_feed, input_feed)[0]
-        
         with open('test_%d.txt' % iter_count, 'w') as f:
             for l in range(4):
                 sentence = []
                 for i in range(decoder_size):
-                    sentence.append( reverse_worddict[output[l][i]] )
+                    sentence.append( reverse_worddict[output[i][l]] )
 
                 sentence = ' '.join(sentence)
                 f.write('%s\n' % sentence)
