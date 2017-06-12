@@ -371,11 +371,17 @@ def test_decoder(config):
             elif config.name_model in [grl_config.name_model, pre_grl_config.name_model]:
                 _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, reward=1,
                                                  bucket_id=bucket_id, forward_only=True)
-                for i, output in enumerate(output_logits):
-                    print("index: %d, answer tokens: %s" %(i, str(output)))
-                    if data_utils.EOS_ID in output:
-                        output = output[:output.index(data_utils.EOS_ID)]
-                    print(" ".join([str(rev_vocab[out]) for out in output]))
+                #output_logits = np.reshape(output_logits,[1,-1,25000])
+                output_logits = np.squeeze(output_logits)
+                outputs = np.argmax(output_logits, axis=1)
+                outputs = list(outputs)
+                # for i, output in enumerate(output_logits):
+                #     print("index: %d, answer tokens: %s" %(i, str(output)))
+                #     if data_utils.EOS_ID in output:
+                #         output = output[:output.index(data_utils.EOS_ID)]
+                if data_utils.EOS_ID in outputs:
+                    outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+                print(" ".join([str(rev_vocab[out]) for out in outputs]))
 
             print("> ", end="")
             sys.stdout.flush()
@@ -465,12 +471,12 @@ def main(_):
     # ce_standard_train(gst_config)
 
     #model_4.1 pre P_rl
-    pre_rl_train(pre_grl_config)
+    #pre_rl_train(pre_grl_config)
 
     # model_4.2 P_rl
     #train()
 
-    #test_decoder(gst_config)
+    test_decoder(pre_grl_config)
 
 
 if __name__ == "__main__":

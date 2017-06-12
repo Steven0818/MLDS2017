@@ -82,8 +82,8 @@ class Pre_GRLConfig(object):
     learning_rate = 0.5
     learning_rate_decay_factor = 0.99
     max_gradient_norm = 5.0
-    batch_size = 10
-    emb_dim = 256
+    batch_size = 50
+    emb_dim = 1024
     num_layers = 2
     vocab_size = 25000
     train_dir = "./pre_grl_data/"

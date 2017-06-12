@@ -168,7 +168,7 @@ class grl_model(object):
         all_variables = [k for k in tf.global_variables() if name_scope in k.name]
         self.saver = tf.train.Saver(all_variables)
 
-    def step(self, session, encoder_inputs, decoder_inputs, target_weights, reward, bucket_id, forward_only, beam_search):
+    def step(self, session, encoder_inputs, decoder_inputs, target_weights, reward, bucket_id, forward_only, beam_search = False):
         encoder_size, decoder_size = self.buckets[bucket_id]
 
         input_feed = {self.forward_only.name: forward_only}
