@@ -381,7 +381,12 @@ def test_decoder(config):
                 #         output = output[:output.index(data_utils.EOS_ID)]
                 if data_utils.EOS_ID in outputs:
                     outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+                print (outputs)
+                while data_utils.UNK_ID in outputs:
+                    sub_max = np.argmax(output_logits[outputs.index(data_utils.UNK_ID)][4:])+4
+                    outputs[outputs.index(data_utils.UNK_ID)] = sub_max
                 print(" ".join([str(rev_vocab[out]) for out in outputs]))
+
 
             print("> ", end="")
             sys.stdout.flush()
