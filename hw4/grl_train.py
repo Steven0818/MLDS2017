@@ -331,7 +331,7 @@ def test_decoder(config):
     train_path = os.path.join(config.train_dir, "movie_subtitle.train")
     data_path_list = [train_path + ".answer", train_path + ".query"]
     vocab_path = os.path.join(config.train_dir, "vocab%d.all" % config.vocab_size)
-    data_utils.create_vocabulary(vocab_path, data_path_list, config.vocab_size)
+#    data_utils.create_vocabulary(vocab_path, data_path_list, config.vocab_size)
     vocab, rev_vocab = data_utils.initialize_vocabulary(vocab_path) 
     dummy_set = data_utils.get_dummy_set("grl_data/dummy_sentence",vocab,25000)
     with tf.Session() as sess:
@@ -391,7 +391,65 @@ def test_decoder(config):
             print("> ", end="")
             sys.stdout.flush()
             sentence = sys.stdin.readline()
+def read_file_test(config,test_model_name,input_path,output_path):
+    vocab_path = os.path.join(config.train_dir, "vocab%d.all" % config.vocab_size)
+    vocab, rev_vocab = data_utils.initialize_vocabulary(vocab_path) 
+    dummy_set = data_utils.get_dummy_set("grl_data/dummy_sentence",vocab,25000)
+    forward_only = True
+    with tf.Session() as sess:
+        with tf.variable_scope(name_or_scope=config.name_model):
+            model = grl_rnn_model.grl_model(grl_config=config, name_scope=config.name_model, forward=forward_only,dummy_set=dummy_set)
+        #ckpt = tf.train.get_checkpoint_state(os.path.join(rl_config.train_dir, "checkpoints"))
+        #print (ckpt.model_checkpoint_path)
+            model.batch_size = 1
+            if test_model_name == 'S2S':
+                model.saver.restore(sess,"grl_data/checkpoints/movie_subtitle.model-118000")
+            elif test_model_name == 'RL':
+                model.saver.restore(sess,"grl_data/checkpoints/movie_subtitle.model-127200")
+            else:
+                model.saver.restore(sess,"grl_data/checkpoints/movie_subtitle.model-127200")
+            with open(input_path) as f:
+                sentences = f.readlines()
+            output_file = []
+            for sentence in sentences:    
+                token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), vocab)
+                print("token_id: ", token_ids)
+                bucket_id = len(config.buckets) - 1
+                for i, bucket in enumerate(config.buckets):
+                    if bucket[0] >= len(token_ids):
+                        bucket_id = i
+                        break
+                else:
+                    print("Sentence truncated: %s", sentence)
 
+                encoder_inputs, decoder_inputs, target_weights, _, _ = model.get_batch({bucket_id: [(token_ids, [1])]},
+                                                                                   bucket_id)
+                _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, reward=1,
+                                                 bucket_id=bucket_id, forward_only=True)
+                #output_logits = np.reshape(output_logits,[1,-1,25000])
+                output_logits = np.squeeze(output_logits)
+                outputs = np.argmax(output_logits, axis=1)
+                outputs = list(outputs)
+                
+                # for i, output in enumerate(output_logits):
+                #     print("index: %d, answer tokens: %s" %(i, str(output)))
+                #     if data_utils.EOS_ID in output:
+                #         output = output[:output.index(data_utils.EOS_ID)]
+                if data_utils.EOS_ID in outputs:
+                    outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+                print (outputs)
+                while data_utils.UNK_ID in outputs:
+                    sub_max = np.argmax(output_logits[outputs.index(data_utils.UNK_ID)][4:])+4
+                    outputs[outputs.index(data_utils.UNK_ID)] = sub_max
+                while 30 in outputs: outputs.remove(30)
+
+                output_sentence = " ".join([str(rev_vocab[out]) for out in outputs])+'\n'
+                #while '$' in output_sentence:
+                output_sentence = output_sentence.replace("$", "")
+                print (output_sentence)
+                output_file.append(output_sentence)
+            f = open(output_path+"sample_output_"+test_model_name+".txt", 'w')
+            f.writelines(output_file)
 
 def decoder(config):
     vocab, rev_vocab, train_set = prepare_data(config)
@@ -481,7 +539,8 @@ def main(_):
     # model_4.2 P_rl
     # train()
 
-    test_decoder(grl_config)
+    read_file_test(grl_config,"S2S","sample_input.txt","")
+    #test_decoder(grl_config)
 
 
 if __name__ == "__main__":
