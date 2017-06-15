@@ -403,11 +403,11 @@ def read_file_test(config,test_model_name,input_path,output_path):
         #print (ckpt.model_checkpoint_path)
             model.batch_size = 1
             if test_model_name == 'S2S':
-                model.saver.restore(sess,"grl_data/checkpoints/movie_subtitle.model-118000")
+                model.saver.restore(sess,"grl_data/movie_subtitle.model-118000")
             elif test_model_name == 'RL':
-                model.saver.restore(sess,"grl_data/checkpoints/movie_subtitle.model-127200")
+                model.saver.restore(sess,"grl_data/movie_subtitle.model-127200")
             else:
-                model.saver.restore(sess,"grl_data/checkpoints/movie_subtitle.model-127200")
+                model.saver.restore(sess,"grl_data/movie_subtitle.model-127200")
             with open(input_path) as f:
                 sentences = f.readlines()
             output_file = []
@@ -448,7 +448,7 @@ def read_file_test(config,test_model_name,input_path,output_path):
                 output_sentence = output_sentence.replace("$", "")
                 print (output_sentence)
                 output_file.append(output_sentence)
-            f = open(output_path+"sample_output_"+test_model_name+".txt", 'w')
+            f = open(output_path, 'w')
             f.writelines(output_file)
 
 def decoder(config):
@@ -539,7 +539,7 @@ def main(_):
     # model_4.2 P_rl
     # train()
 
-    read_file_test(grl_config,"S2S","sample_input.txt","")
+    read_file_test(grl_config,sys.argv[1],sys.argv[2],sys.argv[3])
     #test_decoder(grl_config)
 
 
