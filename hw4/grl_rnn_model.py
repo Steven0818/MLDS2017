@@ -8,7 +8,7 @@ from math import log
 
 
 class grl_model(object):
-    def __init__(self, grl_config, name_scope, num_samples=512, forward = False, beam_search=False, dtype=tf.float32):
+    def __init__(self, grl_config, name_scope, num_samples=512, forward = False, beam_search=False, dtype=tf.float32,dummy_set=[]):
         self.buckets = grl_config.buckets_concat
         self.beam_size = grl_config.beam_size
         self.emb_dim = grl_config.emb_dim
@@ -17,7 +17,7 @@ class grl_model(object):
         #self.learning_rate = grl_config.learning_rate
         self.learning_rate = tf.Variable(float(grl_config.learning_rate), trainable=False)
         self.learning_rate_decay_op = self.learning_rate.assign(self.learning_rate * grl_config.learning_rate_decay_factor)
-        self.dummy_dialogs = []
+        self.dummy_dialogs = dummy_set
         max_gradient_norm = grl_config.max_gradient_norm
         num_layers = grl_config.num_layers
 
@@ -220,9 +220,9 @@ class grl_model(object):
             ep_step_loss.append(step_loss)
 
             state_tran = np.transpose(encoder_states, axes=(1, 0, 2))
-            print("state_tran: ", np.shape(state_tran))
+            #print("state_tran: ", np.shape(state_tran))
             state_vec = np.reshape(state_tran, (self.batch_size, -1))
-            print("state_vec: ", np.shape(state_vec))
+            #print("state_vec: ", np.shape(state_vec))
             enc_states.append(state_vec)
 
             resp_tokens = self.remove_type(output_logits, self.buckets[bucket_id], type=1)
@@ -231,22 +231,22 @@ class grl_model(object):
                 encoder_trans = np.transpose(ep_encoder_inputs, axes=(1, 0))
             except ValueError:
                 encoder_trans = np.transpose(ep_encoder_inputs, axes=(1, 0, 2))
-            print ("[encoder_trans] shape: ", np.shape(encoder_trans))
+            #print ("[encoder_trans] shape: ", np.shape(encoder_trans))
 
             for i, (resp, ep_encoder) in enumerate(zip(resp_tokens, encoder_trans)):
                 if (len(resp) <= 3) or (resp in self.dummy_dialogs) or (resp in ep_encoder.tolist()):
                     batch_mask[i] = 0
-                    print("make mask index: %d, batch_mask: %s" % (i, batch_mask))
+            #        print("make mask index: %d, batch_mask: %s" % (i, batch_mask))
             if sum(batch_mask) == 0 or episode >= 1:
                 break
 
             # ----[Reward]----------------------------------------
-            # r1: Ease of answering
+            #r1: Ease of answering
             # print (len(enc_states))
-            # r1 = [self.logProb(session, st_model, self.buckets, resp_tokens, [d for _ in resp_tokens],
-            #                    mask=batch_mask) for d in self.dummy_dialogs]
+            r1 = [self.logProb(session, st_model, self.buckets, resp_tokens, [d for _ in resp_tokens],
+                                mask=batch_mask) for d in self.dummy_dialogs]
             # print("r1: final value: ", r1)
-            # r1 = -np.mean(r1) if r1 else 0
+            r1 = -np.mean(r1) if r1 else 0
 
             # # r2: Information Flow
             # r2_list = []
@@ -270,14 +270,14 @@ class grl_model(object):
             #     r2 = sum(r2_list) / len(r2_list)
 
             # prepare for next dialogue
-            bk_id = []
-            for i in range(len(resp_tokens)):
-                bk_id.append(min([b for b in range(len(self.buckets)) if self.buckets[b][0] >= len(resp_tokens[i])]))
-            bucket_id = max(bk_id)
-            feed_data = {bucket_id: [(resp_tokens, [])]}
-            encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, _ = self.get_batch(feed_data,
-                                                                                                     bucket_id, type=2)
-            print("r3: Semantic Coherence")
+            # bk_id = []
+            #for i in range(len(resp_tokens)):
+            #    bk_id.append(min([b for b in range(len(self.buckets)) if self.buckets[b][0] >= len(resp_tokens[i])]))
+            #bucket_id = max(bk_id)
+            #feed_data = {bucket_id: [(resp_tokens, [])]}
+            #encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, _ = self.get_batch(feed_data,
+            #                                                                                         bucket_id, type=2)
+            #print("r3: Semantic Coherence")
             # if len(ep_encoder_inputs) < 2:
             #     r3 = 0
             # else:
@@ -286,14 +286,14 @@ class grl_model(object):
             #     answer = ep_encoder_inputs[-1]
             #     query = np.column_stack((pi, qi))
             #     r3_1 = self.logProb(session, cc_model, self.buckets, query, answer, mask=batch_mask)
-            r3_2 = self.logProb(session, bk_model, self.buckets, batch_source_encoder, ep_encoder_inputs[-1], mask=batch_mask)
+            #r3_2 = self.logProb(session, bk_model, self.buckets, batch_source_encoder, ep_encoder_inputs[-1], mask=batch_mask)
             #    print("r3_1: ", r3_1)
-            print("r3_2: ", r3_2)
-            r3 = r3_2 # + r3_1
+            #print("r3_2: ", r3_2)
+            #r3 = r3_2 # + r3_1
 
             # Episode total reward
             #print("r1: %s, r2: %s, r3: %s" % (r1, r2, r3))
-            R = r3
+            R = r1#+0.8*r3_2
             ep_rewards.append(R)
             # ----------------------------------------------------
             episode += 1
@@ -302,7 +302,7 @@ class grl_model(object):
             print("ep_rewards is zero")
             ep_rewards.append(1)
 
-        print("[Step] final:", episode, ep_rewards)
+        #print("[Step] final:", episode, ep_rewards)
         # gradient decent according to batch rewards
         # rto = 0.0
         # if (len(ep_step_loss) <= 1) or (len(ep_rewards) <= 1) or (max(ep_rewards) - min(ep_rewards) == 0):
@@ -312,7 +312,7 @@ class grl_model(object):
         # advantage = [np.mean(ep_rewards) * rto] * len(self.buckets)
 
         reward = [np.mean(ep_rewards)] * len(self.buckets)
-        print("advantage: %s" % reward)
+        #print("advantage: %s" % reward)
         updata, norm, loss = self.step(session, init_inputs[0], init_inputs[1], init_inputs[2], bucket_id=init_inputs[3],
                                     reward=reward, forward_only=False,beam_search = False)
 
@@ -335,7 +335,7 @@ class grl_model(object):
                               if buckets[b][0] >= len(tokens_a[i]) and buckets[b][1] >= len(tokens_b[i])]))
         bucket_id = max(bk_id)
 
-        print("bucket_id: %s" % bucket_id)
+        #print("bucket_id: %s" % bucket_id)
 
         feed_data = {bucket_id: zip(tokens_a, tokens_b)}
 
@@ -347,9 +347,10 @@ class grl_model(object):
                                          bucket_id, forward_only=True)
 
         logits_t = np.transpose(output_logits, (1, 0, 2))
-        print("logits_t shape: ", np.shape(logits_t))
+        #print("logits_t shape: ", np.shape(logits_t))
 
         sum_p = []
+        #print (tokens_b)
         for i, (tokens, logits) in enumerate(zip(tokens_b, logits_t)):
             #print("tokens: %s, index: %d" % (tokens, i))
             # print("logits: %s" %logits)
@@ -366,7 +367,7 @@ class grl_model(object):
                 # print ("p: ", p)
                 p = 1e-100
             p = log(p) / len(tokens)
-            print ("logProb: p: %s" % (p))
+            #print ("logProb: p: %s" % (p))
             sum_p.append(p)
         re = np.sum(sum_p) / len(sum_p)
         # print("logProb: P: %s" %(re))
@@ -379,7 +380,7 @@ class grl_model(object):
             tokens = [i for i in [t for t in reversed(sequence)] if i.sum() != 0]
         elif type == 1:
         #print ("remove_type type=1 tokens: %s" %sequence)
-            print (np.asarray(sequence).shape)
+            #print (np.asarray(sequence).shape)
             for seq in sequence:
                  #print("seq: %s" %seq)
                  token = []

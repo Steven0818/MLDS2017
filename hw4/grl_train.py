@@ -97,10 +97,11 @@ def create_st_model(session, st_config, forward_only, name_scope):
         return st_model
 
 
-def create_rl_model(session, rl_config, forward_only, name_scope):
+def create_rl_model(session, rl_config, forward_only, name_scope, dummy_set):
     with tf.variable_scope(name_or_scope=name_scope):
-        rl_model = grl_rnn_model.grl_model(grl_config=rl_config, name_scope=name_scope, forward=forward_only)
+        rl_model = grl_rnn_model.grl_model(grl_config=rl_config, name_scope=name_scope, forward=forward_only,dummy_set=dummy_set)
         ckpt = tf.train.get_checkpoint_state(os.path.join(rl_config.train_dir, "checkpoints"))
+        print (ckpt.model_checkpoint_path)
         if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
             print("Read %s model from %s" % (name_scope, ckpt.model_checkpoint_path))
             rl_model.saver.restore(session, ckpt.model_checkpoint_path)
@@ -255,9 +256,9 @@ def train():
     vocab, rev_vocab, train_set = prepare_data(grl_config)
     for b_set in train_set:
         print("b_set length: ", len(b_set))
-
+    dummy_set = data_utils.get_dummy_set("grl_data/dummy_sentence",vocab,25000)
     with tf.Session() as sess:
-        rl_model = create_rl_model(sess, grl_config, False, grl_config.name_model)
+        rl_model = create_rl_model(sess, grl_config, False, grl_config.name_model,dummy_set)
         st_model = create_st_model(sess, gst_config, True, gst_config.name_model)
         #bk_model = create_st_model(sess, gbk_config, True, gbk_config.name_model)
         #cc_model = create_st_model(sess, gcc_config, True, gcc_config.name_model)
@@ -283,7 +284,6 @@ def train():
             encoder_inputs, decoder_inputs, target_weights, batch_source_encoder, _ = \
                 rl_model.get_batch(train_set,bucket_id)
            
-            print ("start training one step")
             updata, norm, step_loss = rl_model.step_rl(sess, st_model=st_model, bk_model=st_model, cc_model = st_model,encoder_inputs=encoder_inputs,
                                                decoder_inputs=decoder_inputs, target_weights=target_weights,
                                                batch_source_encoder=batch_source_encoder, bucket_id=bucket_id)
@@ -332,14 +332,14 @@ def test_decoder(config):
     data_path_list = [train_path + ".answer", train_path + ".query"]
     vocab_path = os.path.join(config.train_dir, "vocab%d.all" % config.vocab_size)
     data_utils.create_vocabulary(vocab_path, data_path_list, config.vocab_size)
-    vocab, rev_vocab = data_utils.initialize_vocabulary(vocab_path)
-
+    vocab, rev_vocab = data_utils.initialize_vocabulary(vocab_path) 
+    dummy_set = data_utils.get_dummy_set("grl_data/dummy_sentence",vocab,25000)
     with tf.Session() as sess:
         if config.name_model in [gst_config.name_model, gcc_config.name_model, gbk_config.name_model]:
             model = create_st_model(sess, config, forward_only=True, name_scope=config.name_model)
 
         elif config.name_model in [grl_config.name_model, pre_grl_config.name_model]:
-            model = create_rl_model(sess, config, forward_only=True, name_scope=config.name_model)
+            model = create_rl_model(sess, config, forward_only=True, name_scope=config.name_model,dummy_set = dummy_set)
 
         model.batch_size = 1
 
@@ -468,15 +468,15 @@ def main(_):
     # ce_standard_train(gcc_config)
 
     #model_3 P(s|a)
-    # ce_standard_train(gst_config)
+    #ce_standard_train(gst_config)
 
-    #model_4.1 pre P_rl
+    # model_4.1 pre P_rl
     #pre_rl_train(pre_grl_config)
 
     # model_4.2 P_rl
-    #train()
+    # train()
 
-    test_decoder(pre_grl_config)
+    test_decoder(grl_config)
 
 
 if __name__ == "__main__":
