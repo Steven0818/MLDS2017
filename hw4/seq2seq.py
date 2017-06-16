@@ -385,6 +385,7 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
        											   scope=scope,
 												   feed_type=feed_type,
                                                    beam_size=beam_size)
+
       return outputs, state, encoder_state
 
     # If feed_previous is a Tensor, we construct 2 graphs and use cond.
@@ -422,6 +423,8 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
     if nest.is_sequence(encoder_state):
       state = nest.pack_sequence_as(structure=encoder_state,
                                     flat_sequence=state_list)
+
+    
     return outputs_and_state[:outputs_len], state, encoder_state
 
 
@@ -470,7 +473,7 @@ def sequence_loss(logits, targets, weights,
 
 
 def model_with_buckets(encoder_inputs, decoder_inputs, targets, weights, buckets, seq2seq,
-						softmax_loss_function=None,
+						           softmax_loss_function=None,
                        per_example_loss=False, name=None):
   if len(encoder_inputs) < buckets[-1][0]:
     raise ValueError("Length of encoder_inputs (%d) must be at least that of la"
@@ -497,7 +500,7 @@ def model_with_buckets(encoder_inputs, decoder_inputs, targets, weights, buckets
         encoder_states.append(encoder_state)
         if per_example_loss:
           losses.append(sequence_loss_by_example(outputs[-1], targets[:bucket[1]], weights[:bucket[1]],
-              									softmax_loss_function=softmax_loss_function))
+              						softmax_loss_function=softmax_loss_function))
         else:
           losses.append(sequence_loss(outputs[-1], targets[:bucket[1]], weights[:bucket[1]],
           							  softmax_loss_function=softmax_loss_function))

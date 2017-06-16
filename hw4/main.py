@@ -27,7 +27,7 @@ def main():
     model.build_training_graph('grl_model')
     model.initialize_network()
 
-    model.train(cornell_data, iteration=30000)
+    model.train(cornell_data, iteration=1000000)
 
 if __name__ == "__main__":
     main()

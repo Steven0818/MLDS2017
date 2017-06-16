@@ -94,13 +94,15 @@ class grl_model(object):
                                                               dtype=self.dtype
                                                               )
 
-        self.outputs, self.losses, self.encoder_states= rl_seq2seq.model_with_buckets(encoder_inputs=self.encoder_inputs,
+        self.outputs, self.losses, self.encoder_states = rl_seq2seq.model_with_buckets(encoder_inputs=self.encoder_inputs,
                                                                                       decoder_inputs=self.decoder_inputs,
                                                                                       targets=targets,
                                                                                       weights=self.target_weights,
                                                                                       buckets=self.buckets,
-                                                                                      seq2seq=lambda x, y: seq2seq_f(x, y, tf.where(self.forward_only, True, False)),
+                                                                                      seq2seq=lambda x, y: seq2seq_f(x, y, False),
                                                                                       softmax_loss_function=softmax_loss_function)
+
+        
         """
         self.sample_outputs, _, _ = rl_seq2seq.model_with_buckets(encoder_inputs=self.encoder_inputs,
                                                                   decoder_inputs=self.decoder_inputs,
@@ -110,6 +112,7 @@ class grl_model(object):
                                                                   seq2seq=lambda x, y: seq2seq_f(x, y, tf.where(self.forward_only, True, False), feed_type='sample'),
                                                                   softmax_loss_function=None)
         """ 
+
         self.t_vars = tf.trainable_variables()
         with tf.name_scope("s2s_Gradient"):
             self.s2s_gradient_norms = []
@@ -124,7 +127,7 @@ class grl_model(object):
                 self.s2s_gradient_norms.append(norm)
                 gradient_ops = opt1.apply_gradients(zip(clips_gradient, self.t_vars), global_step=self.s2s_global_step)
                 self.s2s_updates.append(gradient_ops)
-
+        """
         with tf.name_scope("rl_Gradient"):
             self.rl_gradient_norms = []
             self.rl_updates = []
@@ -136,7 +139,8 @@ class grl_model(object):
                 self.rl_gradient_norms.append(norm)
                 gradient_ops = opt2.apply_gradients(zip(clips_gradient, self.t_vars), global_step=self.rl_global_step)
                 self.rl_updates.append(gradient_ops)
-
+        """
+        
         all_variables = tf.global_variables()
         self.saver = tf.train.Saver(all_variables)
         print('[done]')
@@ -181,9 +185,12 @@ class grl_model(object):
             if it != 0 and it % 20 == 0:
                 print("Iteration %d, loss : %f" % (it, loss))
             
-            if it != 0 and  it % 2000 == 0:
+            if it != 0 and  it % 200 == 0:
                 self._test(reverse_worddict, it)
             
+            if it !=0 and it % 200000 == 0:
+                self.saver.save(self.sess, "chatbot_%d.ckpt"%it)
+
     def _test(self, reverse_worddict, iter_count):
         sentence1 = [3, 60, 20, 12, 68, 7, 4, 1, 1, 1] #how is it going?
         sentence2 = [3, 190, 64, 207, 2, 4 , 1, 1, 1, 1] #let's go home.
@@ -210,6 +217,9 @@ class grl_model(object):
         output_feed = [self.s2s_output_widx[0]]
 
         output = self.sess.run(output_feed, input_feed)[0]
+
+        print(len(output))
+        print(output[0].shape)
         with open('test_%d.txt' % iter_count, 'w') as f:
             for l in range(4):
                 sentence = []
