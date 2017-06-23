@@ -1,13 +1,19 @@
-import pickle
+import json
 import numpy as np
 
-def load_worddict(filepath, vocab_size):
-    with open(filepath, 'rb') as f:
-        wordcount = pickle.load(f)[0]
+def load_worddict(filepath):
+    with open(filepath, 'r') as f:
+        w2id_dict = json.load(f)
 
-    w2id_dict = {}
-    for i, (word, _) in enumerate(wordcount):
-        w2id_dict[word] = i
+    return w2id_dict
+
+def generate_w2vec_txt(embed_arr, id2w_dict, outfile='wordvec.txt'):
     
-        if i == vocab_size - 1:
-            return w2id_dict
+    with open(outfile, 'w') as f:
+        for i, vec in enumerate(embed_arr):
+            wvec_list = [id2w_dict[i]]
+            wvec_list.extend(['%.5f' % num for num in vec])
+            
+            wvec_str = ' '.join(wvec_list)
+            f.write('%s\n' % wvec_str)
+    
