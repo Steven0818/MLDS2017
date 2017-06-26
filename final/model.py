@@ -13,7 +13,7 @@ class Word2vec_model():
         
         self.learning_rate = tf.Variable(float(learning_rate), trainable=False)
         self.learning_decay = learning_decay
-        self.lr_decay_op = self.learning_rate.assign(tf.maximum(0.0001, self.learning_rate*self.learning_decay))
+        self.lr_decay_op = self.learning_rate.assign(tf.maximum(0.0001, self.learning_decay*self.learning_rate))
 
     def create_placeholder(self):
         self.input_word = tf.placeholder(tf.int32, shape=[self.batch_size], name='input')
@@ -45,16 +45,20 @@ class Word2vec_model():
 
         print('[done]')
 
-    def initialize(self):
+    def initialize(self, reload=False):
         print('Initializing model...')
         
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
 
         self.sess = tf.Session(config=config)
-        self.sess.run(tf.global_variables_initializer())
-
         self.saver = tf.train.Saver()
+
+        if reload:
+            self.saver.restore(self.sess, "model/model_19")
+            self.sess.run(self.learning_rate.assign(0.05))
+        else:
+            self.sess.run(tf.global_variables_initializer())
 
         print('[done]')
 

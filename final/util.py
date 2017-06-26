@@ -7,6 +7,12 @@ def load_worddict(filepath):
 
     return w2id_dict
 
+def load_wordfeq(filepath):
+    with open(filepath, 'r') as f:
+        wid2feq_dict = json.load(f)
+    
+    return {int(k):v for k, v in wid2feq_dict.items()}
+
 def generate_w2vec_txt(embed_arr, id2w_dict, outfile='wordvec.txt'):
     
     with open(outfile, 'w') as f:

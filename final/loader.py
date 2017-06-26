@@ -70,8 +70,9 @@ class WikiAllData():
             yield q_output
 
 class Wiki9Data():
-    def __init__(self, corpus, w2id_dict, window_size=5):
+    def __init__(self, corpus, w2id_dict, w2feq_dict, window_size=5):
         self.w2id_dict = w2id_dict
+        self.wid2feq_dict = w2feq_dict
         self.window_size = window_size
 
         print('Starting loading Wiki Corpus...', end='')
@@ -103,10 +104,14 @@ class Wiki9Data():
             for mid_idx in idx_queue:
                 if self.wiki_corpus[mid_idx] == -1:
                     continue
-                    
+
+                subsampling_prob = 1. - np.sqrt(0.00001 / self.wid2feq_dict[self.wiki_corpus[mid_idx]])
+                if random.random() < subsampling_prob:
+                    continue   
+
                 start_idx = max(0,mid_idx-window)
                 end_idx = min(mid_idx+window, corpus_len-1)
-                
+
                 # go through window
                 for target_idx in range(start_idx, end_idx+1):
                     if target_idx == mid_idx:
