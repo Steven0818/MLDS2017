@@ -1,118 +1,136 @@
 import numpy as np
 import multiprocessing as mp
 import random
-
+import os
 
 class DataLoader():
-    def __init__(self, input_words, num_steps=40, vocab_size=30000):
-        self.num_steps = num_steps
+    def __init__(self, input_json, data_path='data/training_data/feat' ,frame_step=20, frame_dim=4096, caption_step=45 ,vocab_size=3000):
         self.vocab_size = vocab_size
+        self.data_path = data_path
+        self.frame_step = frame_step
+        self.frame_dim = frame_dim
+        self.caption_step = caption_step
         
-        data_len = len(input_words)
-        self.sentence_count = data_len // (num_steps)
-        
-        self.sentence_arr = np.array(input_words[:self.sentence_count * (num_steps)]).reshape((self.sentence_count, num_steps))
-        
-        
+        self.video_names = []
+        self.cap_sentences = []
+        for video in input_json:
+            for sentence in video['caption']:
+                self.video_names.append(video['id'])
+                self.cap_sentences.append(sentence)
+        self.shuffle()
+
     def shuffle(self):
-        np.random.shuffle(self.sentence_arr)
-    
-    def batch_count(self, batch_size):
-        return (self.sentence_arr.shape[0] // batch_size) + 1
-    
+        z = list(zip(self.video_names, self.cap_sentences))
+        random.shuffle(z)
+        self.video_names, self.cap_sentences = zip(*z)
+        
     def batch_gen(self, batch_size):
         QUEUE_END = '__QUEUE_END105834569xx'
         
-        def idx2vec(num_steps, vocab_size, q):
+        def raw2vec(caption_step, q):
             
-            for i in range(self.sentence_count):
-                vec = np.zeros([num_steps, vocab_size])
-                
-                sentence = self.sentence_arr[i]
-                for j, one_hot_idx in enumerate(sentence):
-                    vec[j, one_hot_idx] = 1
-                
-                q.put(vec)
-            
+            for i, filename in enumerate(self.video_names):
+                filepath = os.path.join(self.data_path, filename + '.npy')
+                x = np.load(filepath)                
+                y = np.array(self.cap_sentences[i]).astype(np.int32)
+                q.put((x,y))
             q.put(QUEUE_END)
             q.close()
             
-        q = mp.Queue(maxsize=100)
+        q = mp.Queue(maxsize=200)
         
-        p = mp.Process(target=idx2vec, args=(self.num_steps, self.vocab_size, q))
+        p = mp.Process(target=raw2vec, args=(self.caption_step, q))
         p.daemon = True
         p.start()
         
-        x = np.zeros((batch_size, self.num_steps, self.vocab_size))
+        x_batch = np.zeros((batch_size, self.frame_step, self.frame_dim), dtype=np.float32)
+        y_batch = np.zeros((batch_size, self.caption_step+1), dtype=np.int32)
+        y_mask = np.zeros((batch_size, self.caption_step+1), dtype=np.int32)
         
-        for i in range(0, self.sentence_count, batch_size):
+        for i in range(0, len(self.video_names), batch_size):
             for j in range(batch_size):
                 vec = q.get()
                 
                 if vec == QUEUE_END:
-                    x = np.delete(x, range(j, batch_size), axis=0)
+                    x_batch = np.delete(x_batch, range(j, batch_size), axis=0)
+                    y_batch = np.delete(y_batch, range(j, batch_size), axis=0)
+                    y_mask = np.delete(y_mask, range(j, batch_size), axis=0)
                     break
+                x, y = vec
+                x = np.asarray([x[k*2,:]for k in range(self.frame_step)])
+                x_batch[j, ...] = x
+                y_batch[j,:len(y)] = y
+                y_mask[j, :len(y)] = 1
                 
-                x[j, ...] = vec
-                
-            yield x
-       
-class DataLoader2():
-    def __init__(self, input_words, num_steps=40, vocab_size=30000):
-        self.num_steps = num_steps
+            yield x_batch, y_batch,y_mask
+
+class TestDataLoader():
+    def __init__(self, input_json, data_path='data/testing_data/feat', frame_step=20, frame_dim=4096, caption_step=45, vocab_size=3000, shuffle=True):
         self.vocab_size = vocab_size
-        
-        data_len = len(input_words)
-        self.sentence_count = data_len // (num_steps)
-        
-        self.sentence_arr = np.array(input_words[:self.sentence_count * (num_steps)]).reshape((self.sentence_count, num_steps))
-        
-        
-    def shuffle(self):
-        np.random.shuffle(self.sentence_arr)
-    
-    def batch_count(self, batch_size):
-        return (self.sentence_arr.shape[0] // batch_size) + 1
-    
-    def batch_gen(self, batch_size):
-        QUEUE_END = '__QUEUE_END105834569xx'
-        
-        def idx2vec(num_steps, vocab_size, batch_size, q):            
-            batch_count_epoch = self.sentence_count // batch_size + 1
-      
-            for i in range(batch_count_epoch):
-                x = np.zeros([batch_size, num_steps, vocab_size])
-                for j in range(batch_size):
-                    sentence_idx = i*batch_size + j
-                    
-                    if sentence_idx < self.sentence_count:
-                        sentence = self.sentence_arr[sentence_idx]
-                        for k, one_hot_idx in enumerate(sentence):
-                            x[j, k, one_hot_idx] = 1
-                    else: 
-                        x = np.delete(x, range(j, batch_size), axis=0)
-                        break
-                        
-                q.put(x)
-                    
-            q.put(QUEUE_END)
-            q.close()
-            
-        q = mp.Queue(maxsize=20)
-        
-        p = mp.Process(target=idx2vec, args=(self.num_steps, self.vocab_size, batch_size, q))
-        p.daemon = True
-        p.start()
-        
-        x = np.zeros((batch_size, self.num_steps, self.vocab_size))
-        
-        
-        batch_count_epoch = self.sentence_count // batch_size + 1
-        for i in range(batch_count_epoch):
-            x = q.get()
-                
-            if x == QUEUE_END:  
-                break
-                
-            yield x
-        
+        self.data_path = data_path
+        self.frame_step = frame_step
+        self.frame_dim = frame_dim
+        self.caption_step = caption_step
+
+        self.video_names = []
+        self.captions = []
+        for video in input_json:
+                self.video_names.append(video['id'])
+                self.captions.append([sen.replace('.', '') for sen in video['caption']])
+    def get_data(self, batch_size):
+        ret = []
+
+
+        for i in range(0, len(self.video_names), batch_size):
+            end = i + batch_size
+            x_batch = np.zeros((batch_size, self.frame_step, self.frame_dim), dtype=np.float32)
+            for j in range(batch_size):     
+                if i + j >= len(self.video_names):
+                    x_batch = np.delete(x_batch, range(j, batch_size), axis=0)
+                    end = i + j
+                    break
+                filename = self.video_names[i + j]
+                filepath = os.path.join(self.data_path, filename + '.npy')
+                x = np.load(filepath) 
+                x = np.asarray([x[k*4,:]for k in range(self.frame_step)])
+                x_batch[j, ...] = x
+            ret.append((x_batch, self.video_names[i:end], self.captions[i:end]))
+        return ret
+
+
+class TestPrivateDataLoader():
+    def __init__(self, id_path, data_path, frame_step=20, frame_dim=4096, caption_step=45, vocab_size=3000, shuffle=True):
+        self.vocab_size = vocab_size
+        self.data_path = data_path
+        self.frame_step = frame_step
+        self.frame_dim = frame_dim
+        self.caption_step = caption_step
+
+        self.video_names = []
+        self.captions = []
+        with open(id_path) as f:
+            content = f.readlines()
+        ids = [x.strip() for x in content]
+        for id in ids:
+            self.video_names.append(id)
+
+    def get_data(self, batch_size):
+        ret = []
+
+        for i in range(0, len(self.video_names), batch_size):
+            end = i + batch_size
+            x_batch = np.zeros((batch_size, self.frame_step,
+                                self.frame_dim), dtype=np.float32)
+            for j in range(batch_size):
+                if i + j >= len(self.video_names):
+                    x_batch = np.delete(x_batch, range(j, batch_size), axis=0)
+                    end = i + j
+                    break
+                filename = self.video_names[i + j]
+                filepath = os.path.join(self.data_path, filename + '.npy')
+                x = np.load(filepath)
+                x = np.asarray([x[k * 4, :]for k in range(self.frame_step)])
+                x_batch[j, ...] = x
+            ret.append(
+                (x_batch, self.video_names[i:end]))
+        return ret

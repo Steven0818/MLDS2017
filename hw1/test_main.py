@@ -1,96 +1,60 @@
-import tensorflow as tf
+import sys
 import json
 import numpy as np
-import csv
-import sys
-from rason_model import biGRU_model
+import model
+import util
+import input
+import eval
+import time
+
+VOCAB_SIZE = 3000
+FRAME_STEP = 20
+FRAME_DIM = 4096
+BATCH_SIZE = 100
+CAPTION_STEP = 45
+EPOCH = 1000
+SCHEDULED_SAMPLING_CONVERGE = 5000
+MODEL_FILE_NAME = 'result_schedule'
 
 
-NUM_STEPS = 40
-VOCAB_SIZE = 30000
-EMBEDDING_DIM = 300
-BATCH_SIZE = 20
-MAX_EPOCH = 10
-NUM_HIDDEN = 800
-KEEP_PROB = 0.5
+def trim(sen):
+    if 3 in sen:
+        return sen[:sen.index(3)]
+    else:
+        return sen
+
+def test(model, test_data, dict_rev):
+    answers = []
+    score = 0
+    for x, video_ids in test_data:
+        result = model.predict(x)
+        sentences = [' '.join([dict_rev[str(word)]
+                               for word in trim(sen.tolist())]) for sen in result[0]]
+        answers.extend(list(zip(video_ids, sentences)))
+    json.dump([{'caption': cap, 'id:': vid} for vid, cap in answers],
+              open('output.json', 'w'))
 
 def main():
-        
-    with open('test.json', 'r') as f:
-        test_data = json.loads(f.read())
-    
-    model = biGRU_model(num_steps = NUM_STEPS,
-                        vocab_size = VOCAB_SIZE,
-                        num_hidden = NUM_HIDDEN,
-                        num_layers = 2)
-    
-    model.loadModel('./model_50000.ckpt')
-    
-    test(model, test_data, 0)
-    
-def test(model, test_data, global_step):    
-    answer_list = ["a","b","c","d","e"]
-    
-    predict_list = []
-    predict_list.append(["id","answer"])
-    
-    input_data = []
-    answer_word_index = []
-    answer_option = []
-    question_count = 0
-    
-    for data in test_data:
-        
-        for index,value in enumerate(data["sentence"]):
-            if value == -1:
-                answer_word_index.append(index)
-        
-        input_data.append(data["sentence"])
-        answer_option.append(data["answer"])
-        
-        if len(input_data) % BATCH_SIZE == 0:
-            input_sentences = index2vector(input_data, NUM_STEPS, VOCAB_SIZE)
 
-            ### (batch_size,(max_sentence_len-2),word_dimension)
-            predict_result = model.predict(input_sentences, keep_prob=1.)  
-            
-            for i, predict_distribute in enumerate(predict_result):
-                #answer_word_index[i] - 1 for the predict_result starts from the 2nd word in sentence
-                answer_prob_distribute = np.asarray(predict_distribute[answer_word_index[i] - 1])[answer_option[i]]
-                question_count += 1
-                predict_pair = [question_count, answer_list[np.argmax(answer_prob_distribute)]]
-                predict_list.append(predict_pair)
-            
-            answer_word_index = []
-            answer_option = []
-            input_data = []
+    d_idx2word = json.load(open('dict_rev.json', 'r'))
 
-    if len(input_data) != 0:
-        input_sentences = index2vector(input_data, NUM_STEPS, VOCAB_SIZE)
-        ### (batch_size,(max_sentence_len-2),word_dimension)
-        predict_result = model.predict(input_sentences)  
-            
-        for i, predict_distribute in enumerate(predict_result):
-            answer_prob_distribute = np.asarray(predict_distribute[answer_word_index[i] - 1])[answer_option[i]]
-            question_count += 1
-            predict_pair = [question_count,answer_list[np.argmax(answer_prob_distribute)]]
-            predict_list.append(predict_pair)
 
-    with open(sys.argv[1], "w") as f:  
-        w = csv.writer(f)  
-        w.writerows(predict_list)
-    
-    print ("finish prediction.....")
+    feature_path = sys.argv[2]
+    id_file = sys.argv[1]
+    print(feature_path, id_file)
+    test_data_loader = input.TestPrivateDataLoader(id_path=id_file,
+                                        data_path=feature_path,
+                                        frame_step=FRAME_STEP,
+                                        frame_dim=FRAME_DIM,
+                                        caption_step=CAPTION_STEP,
+                                        vocab_size=VOCAB_SIZE,
+                                        shuffle=False
+                                        )
+    S2VT = model.Effective_attention_model(caption_steps=CAPTION_STEP)
+    S2VT.loadModel('./model_30000.ckpt')
+    test_batch = test_data_loader.get_data(BATCH_SIZE)
+    test(S2VT, test_batch, d_idx2word)
 
-def index2vector(input_data, num_steps, vocab_size):
-    
-    sentences = np.zeros([len(input_data), num_steps, vocab_size])
-    
-    for i,data in enumerate(input_data):
-        for j,one_hot_index in enumerate(data):
-            sentences[i,j,one_hot_index] = 1
 
-    return sentences    
-    
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
