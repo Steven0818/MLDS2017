@@ -1,13 +1,11 @@
-# MLDS Homework
+# MLDS Projects
 
-repository for NTU MLDS course
+repository for NTU MLDS courses
 
 ### Requirement
 
 tensorflow >= 1.0.0
 
-### HW1
-deadline 2017/03/25 23:59:59
 
 [description](https://docs.google.com/presentation/d/1h51R4pMeZkS_CCdU0taBkQucUnPeyucQX433lsw8bVk/edit#slide=id.g1cc39546d1_0_22)
 
